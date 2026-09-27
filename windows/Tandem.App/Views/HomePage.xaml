@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="Tandem.App.Views.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:app="using:Tandem.App"
+    xmlns:views="using:Tandem.App.Views">
+
+    <Grid>
+        <views:PairingView Visibility="{x:Bind app:Ui.Hide(Session.IsConnected), Mode=OneWay}" />
+
+        <ScrollViewer Visibility="{x:Bind app:Ui.Show(Session.IsConnected), Mode=OneWay}">
+            <StackPanel MaxWidth="920" Padding="40,28,40,40" Spacing="16">
+
+                <!-- Phone -->
+                <Border Style="{StaticResource CardStyle}" Padding="24">
+                    <Grid ColumnSpacing="24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- A little phone drawing -->
+                        <Border Width="58" Height="100" CornerRadius="12" BorderThickness="3"
+                                BorderBrush="{ThemeResource TextFillColorPrimaryBrush}" VerticalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="{ThemeResource SystemAccentColorLight2}" Offset="0" />
+                                    <GradientStop Color="{ThemeResource SystemAccentColorDark1}" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Border Width="16" Height="4" CornerRadius="2" VerticalAlignment="Top" Margin="0,6,0,0"
+                                    Background="{ThemeResource TextFillColorPrimaryBrush}" Opacity="0.7" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Text="{x:Bind Session.Name, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" TextTrimming="CharacterEllipsis" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="{x:Bind Session.TransportGlyph, Mode=OneWay}" FontSize="14" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="{x:Bind Session.Details, Mode=OneWay}" Style="{StaticResource SecondaryText}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind app:Ui.ShowText(Session.BatteryText), Mode=OneWay}">
+                                <FontIcon Glyph="{x:Bind Session.BatteryGlyph, Mode=OneWay}" FontSize="16" />
+                                <TextBlock Text="{x:Bind Session.BatteryText, Mode=OneWay}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" VerticalAlignment="Center" Padding="18,10" Click="Mirror_Click"
+                                Style="{StaticResource AccentButtonStyle}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="{x:Bind MirrorGlyph(Mirror.IsMirroring), Mode=OneWay}" FontSize="16" />
+                                <TextBlock Text="{x:Bind MirrorLabel(Mirror.IsMirroring), Mode=OneWay}" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Collapsed (not just closed) until shown, so they don't add StackPanel spacing -->
+                <InfoBar x:Name="InputBlockedBar" Severity="Warning" IsOpen="False" Visibility="Collapsed"
+                         Title="Your phone is blocking mouse and keyboard control"
+                         Message="You can see the screen, but Xiaomi, Redmi and POCO phones also need 'USB debugging (Security settings)' turned on. Find it in Developer options, turn it on, then start mirroring again."
+                         Closed="InfoBar_Closed" />
+
+                <InfoBar x:Name="MirrorErrorBar" Severity="Error" IsOpen="False" Visibility="Collapsed" Title="Mirroring stopped"
+                         Closed="InfoBar_Closed" />
+
+                <!-- Features -->
+                <Grid ColumnSpacing="16" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Mirroring options -->
+                    <Border Style="{StaticResource CardStyle}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                <Border Style="{StaticResource IconBadgeStyle}">
+                                    <FontIcon Glyph="&#xE7F4;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Screen mirroring" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="Use your phone with mouse and keyboard." Style="{StaticResource SecondaryText}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AudioToggle" Header="Play phone sound on this PC" OnContent="On" OffContent="Off" Toggled="MirrorOption_Toggled" />
+                            <ToggleSwitch x:Name="ScreenOffToggle" Header="Turn the phone's screen off while mirroring" OnContent="On" OffContent="Off" Toggled="MirrorOption_Toggled" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Clipboard -->
+                    <Border Grid.Column="1" Style="{StaticResource CardStyle}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                <Border Style="{StaticResource IconBadgeStyle}">
+                                    <FontIcon Glyph="&#xE77F;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Shared clipboard" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="{x:Bind Clipboard.StatusText, Mode=OneWay}" Style="{StaticResource SecondaryText}" MaxWidth="300" />
+                                </StackPanel>
+                            </StackPanel>
+                            <ToggleSwitch x:Name="ClipboardToggle" Header="Share copied text between phone and PC" OnContent="On" OffContent="Off" Toggled="Clipboard_Toggled" />
+                            <InfoBar Severity="Warning" IsClosable="False"
+                                     IsOpen="{x:Bind Clipboard.PhoneCopyBlocked, Mode=OneWay}"
+                                     Visibility="{x:Bind app:Ui.Show(Clipboard.PhoneCopyBlocked), Mode=OneWay}"
+                                     Title="Copying from your phone is blocked"
+                                     Message="Xiaomi's clipboard privacy setting hides what you copy on the phone. Text copied on this PC still reaches the phone.">
+                                <InfoBar.ActionButton>
+                                    <Button x:Name="AllowClipboardButton" Content="Allow" Click="AllowClipboard_Click" />
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+                            <TextBlock Style="{StaticResource SecondaryText}" FontSize="12"
+                                       Text="Passwords copied from password managers stay on this PC." />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Files -->
+                    <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource IconBadgeStyle}">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Phone files" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="Browse photos, downloads and documents. Drag files in and out." Style="{StaticResource SecondaryText}" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="Open files" Click="Files_Click" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

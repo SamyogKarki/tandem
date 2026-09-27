@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Third-party binaries fetched by tools/fetch-vendor.ps1
+vendor/
+
+# Android (phase 2)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.keystore
+*.jks

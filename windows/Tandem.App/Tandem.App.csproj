@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <RootNamespace>Tandem.App</RootNamespace>
+    <AssemblyName>Tandem</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <!-- Unpackaged + self-contained for now: runs without the Windows App Runtime or a .NET install.
+         Phase 3 (Bluetooth calls) needs package identity; revisit packaging then. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <ApplicationIcon>Assets\tandem.ico</ApplicationIcon>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tandem.Core\Tandem.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Bundled scrcpy + adb (fetched by tools\fetch-vendor.ps1, not in git). Keep the version in
+       sync with ToolPaths.ScrcpyVersion: the phone-side server checks it. -->
+  <PropertyGroup>
+    <ScrcpyVersion>4.1</ScrcpyVersion>
+    <ScrcpyVendorDir>$(MSBuildThisFileDirectory)..\..\vendor\scrcpy-win64-v$(ScrcpyVersion)\</ScrcpyVendorDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(ScrcpyVendorDir)**\*" Exclude="$(ScrcpyVendorDir)*.bat;$(ScrcpyVendorDir)*.vbs;$(ScrcpyVendorDir)*.png"
+          Link="tools\scrcpy\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <!-- scrcpy shows this image when the phone disconnects -->
+    <None Include="$(ScrcpyVendorDir)disconnected.png" Link="tools\scrcpy\disconnected.png" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckVendoredTools" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(ScrcpyVendorDir)scrcpy.exe')" Text="scrcpy $(ScrcpyVersion) is missing. Run tools\fetch-vendor.ps1 from the repo root, then build again." />
+  </Target>
+
+</Project>

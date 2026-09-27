@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/windows/">
+    <Project Path="windows/Tandem.App/Tandem.App.csproj" />
+    <Project Path="windows/Tandem.Core.Tests/Tandem.Core.Tests.csproj" />
+    <Project Path="windows/Tandem.Core/Tandem.Core.csproj" />
+    <Project Path="windows/Tandem.DeviceCheck/Tandem.DeviceCheck.csproj" />
+  </Folder>
+</Solution>
