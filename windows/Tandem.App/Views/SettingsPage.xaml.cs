@@ -19,6 +19,7 @@ public sealed partial class SettingsPage : Page
         Select(BitRateBox, s.MirrorBitRateMbps);
         Select(FpsBox, s.MirrorMaxFps);
         OnTopToggle.IsOn = s.MirrorAlwaysOnTop;
+        StartupToggle.IsOn = s.StartWithWindows;
         DownloadFolderText.Text = s.DownloadFolder;
         var version = typeof(App).Assembly.GetName().Version;
         VersionText.Text = $"Tandem {version?.ToString(3)} · scrcpy {ToolPaths.ScrcpyVersion}";
@@ -36,6 +37,14 @@ public sealed partial class SettingsPage : Page
         s.MirrorMaxFps = SelectedValue(FpsBox, s.MirrorMaxFps);
         s.MirrorAlwaysOnTop = OnTopToggle.IsOn;
         Store.Save();
+    }
+
+    private void Startup_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (!_ready) return;
+        Store.Current.StartWithWindows = StartupToggle.IsOn;
+        Store.Save();
+        StartupRegistration.Apply(StartupToggle.IsOn);
     }
 
     private async void ChangeFolder_Click(object sender, RoutedEventArgs e)

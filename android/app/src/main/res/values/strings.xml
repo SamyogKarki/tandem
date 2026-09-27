@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tandem</string>
+    <string name="tagline">Shows this device\'s notifications on your Windows PC. Set it up from the Tandem app on the PC.</string>
+    <string name="status_access_on">✓ Notification access is on</string>
+    <string name="status_access_off">Notification access is off</string>
+    <string name="status_pc_connected">✓ Connected to your PC</string>
+    <string name="status_pc_waiting">Waiting for your PC (open Tandem on the PC, same Wi-Fi)</string>
+    <string name="status_pc_not_paired">Not set up yet. Open Tandem on your PC and choose Set up.</string>
+    <string name="send_test">Send a test notification</string>
+    <string name="open_access_settings">Turn on notification access</string>
+    <string name="test_channel_name">Tandem test</string>
+    <string name="test_notification_title">Tandem test</string>
+    <string name="test_notification_text">If you can read this on your PC, notifications work. Try replying from the PC.</string>
+    <string name="test_reply_received">You replied \"%1$s\". Replies from the PC work!</string>
+    <string name="reply">Reply</string>
+</resources>

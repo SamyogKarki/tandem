@@ -24,6 +24,8 @@ public sealed class AppServices
         Mirror = new MirrorService(Tools, Settings, Clipboard, ui);
         Transfers = new TransferService(ui);
         Files = new ViewModels.FilesViewModel(Session, Settings);
+        Toasts = new ToastPresenter();
+        Notifications = new NotificationService(Session, Settings, Tools, Toasts, Mirror, ui);
     }
 
     public static AppServices Current { get; private set; } = null!;
@@ -39,6 +41,8 @@ public sealed class AppServices
     public MirrorService Mirror { get; }
     public TransferService Transfers { get; }
     public ViewModels.FilesViewModel Files { get; }
+    public ToastPresenter Toasts { get; }
+    public NotificationService Notifications { get; }
 
     public static AppServices Create(DispatcherQueue ui) => Current = new AppServices(ui);
 

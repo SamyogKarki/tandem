@@ -41,5 +41,24 @@ public sealed partial class MirrorService(ToolPaths tools, SettingsStore setting
     public async Task StopAsync()
     {
         if (_session is { } s) await s.StopAsync();
+        foreach (var app in _appWindows.ToList()) await app.StopAsync();
+    }
+
+    private readonly List<MirrorSession> _appWindows = [];
+
+    /// <summary>
+    /// Opens one phone app in its own window on the PC (a separate virtual display, so the
+    /// phone's own screen is left alone). Used when a notification is clicked.
+    /// </summary>
+    public void OpenApp(PhoneConnection phone, string package, string title)
+    {
+        var options = settings.Current.ToMirrorOptions(title, clipboard.IsBridgeRunning) with { StartApp = package };
+        var session = MirrorSession.Start(tools, phone.Serial, options);
+        _appWindows.Add(session);
+        session.Exited += s => ui.TryEnqueue(() =>
+        {
+            _appWindows.Remove(s);
+            s.Dispose();
+        });
     }
 }

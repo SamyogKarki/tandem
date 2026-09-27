@@ -1,6 +1,6 @@
 # Tandem
 
-**Your Android phone, on your Windows PC.** Mirror and control the screen, browse the phone's files and drag them in and out, and share one clipboard. Nothing to install on the phone.
+**Your Android phone, on your Windows PC.** Mirror and control the screen, browse the phone's files and drag them in and out, share one clipboard, and get your phone's notifications on the PC, with reply. Everything except notifications works with nothing installed on the phone. For notifications, Tandem installs a 50 KB companion app in one click.
 
 Tandem connects over **Wireless debugging**, which is built into Android 11 and newer. You scan a QR code once, and after that the phone and PC find each other on your Wi-Fi. The connection is Android's own adb protocol, encrypted and paired to this PC.
 
@@ -13,7 +13,9 @@ Tandem connects over **Wireless debugging**, which is built into Android 11 and 
 | **Phone files**: browse storage and SD card, open, rename, delete, new folder | ✅ |
 | **Drag & drop**: drop PC files and folders onto the phone, drag phone files out to Explorer | ✅ |
 | **Shared clipboard**: copy on one device, paste on the other, even with the mirror window closed | ✅ |
-| Notifications on the PC, with reply | Phase 2 (companion app) |
+| **Phone notifications on the PC**: Windows notifications with the sender's photo; reply right from the notification; click to open that app in its own window on the PC; dismissing on the phone clears it on the PC | ✅ (companion app) |
+| **Lives in the tray**: starts with Windows, closing the window keeps the phone connected, one instance only | ✅ |
+| Reconnect by itself after the phone reboots; call alerts; notification list with per-app mute | Phase 2b |
 | Calls through the PC's mic and speakers (Bluetooth hands-free) | Phase 3 (feasibility spike first) |
 | Phone in File Explorer's sidebar | Later |
 
@@ -25,24 +27,38 @@ Windows PC                                            Android phone
 │ Tandem (C#, WinUI 3)         │◄────────────────────►│ adbd (built into Android)   │
 │  ├─ pairing: QR → mDNS → pair│                      │  ├─ sync service: files      │
 │  ├─ files: adb sync protocol │                      │  ├─ shell                    │
-│  ├─ clipboard bridge ────────┼── scrcpy control ───►│  └─ scrcpy-server (as shell) │
-│  └─ mirroring: scrcpy window │   protocol           │      clipboard, video, input │
+│  ├─ clipboard bridge ────────┼── scrcpy control ───►│  ├─ scrcpy-server (as shell) │
+│  ├─ mirroring: scrcpy window │   protocol           │  │   clipboard, video, input │
+│  └─ notifications ───────────┼── adb forward ──────►│  └─ Tandem companion (Kotlin)│
+│     → Windows toasts         │   JSON frames        │      NotificationListener    │
 └──────────────────────────────┘                      └─────────────────────────────┘
 ```
 
 - **Pairing:** Tandem shows `WIFI:T:ADB;S:<name>;P:<password>;;` as a QR code, which is the same handshake Android Studio uses. The phone advertises a `_adb-tls-pairing._tcp` mDNS service, and Tandem finds it and runs `adb pair`. After that, adb reconnects on its own whenever the phone is on the same network.
 - **Clipboard:** Android only lets the foreground app or the keyboard read the clipboard, but adb's shell user is exempt. Tandem runs scrcpy's server in control-only mode (no video, screen untouched) and uses its clipboard messages. A loop guard stops copies from bouncing back and forth. Text marked as sensitive by Windows password managers is never sent.
 - **Files:** adb's sync protocol (`LIS2`/`STA2`/`SND2`/`RCV2`), streamed with no temp copies. Name clashes keep both files ("photo (2).jpg"), and nothing is overwritten.
+- **Notifications:** The companion (`android/`) is a `NotificationListenerService`, which Android keeps running, so it needs no foreground service and shows no permanent status-bar icon. It listens on an abstract Unix socket that the PC reaches through `adb forward`, so notifications travel over the same encrypted, paired connection.
+  - **Who can connect:** the companion only accepts connections from adb (peer uid 2000).
+  - **Proving it's the companion:** the PC checks an HMAC-SHA256 proof over a random nonce, using a secret handed over at setup. The secret goes through `am broadcast` to a receiver guarded by the `DUMP` permission, which only the adb shell holds. So no other app on the phone can pose as the companion.
+  - **One-click setup:** runs `adb install -g`, `cmd notification allow_listener`, and the battery and autostart exemptions. The user never sideloads an APK or digs through settings.
+  - **What reaches the PC:** ongoing notifications (music, downloads), silent ones, group summaries and "local only" ones are skipped. Replies fill the app's own `RemoteInput`, exactly as the phone's notification shade does.
+- **Windows notifications:** Windows App SDK 2.5.1's `AppNotificationManager` is broken in self-contained unpackaged apps ([WindowsAppSDK#6774](https://github.com/microsoft/WindowsAppSDK/issues/6774)). Tandem uses the Windows toast API directly instead:
+  - a per-user AUMID registration;
+  - a COM toast activator, `INotificationActivationCallback`, for clicks and replies;
+  - a Start menu shortcut stamped with the AUMID and activator CLSID. Without it, Windows files the notifications silently and never shows a banner.
 
 ## Build
 
-Requirements: Windows 10 1903+ / Windows 11, and the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Requirements: Windows 10 1903+ / Windows 11, the [.NET 10 SDK](https://dotnet.microsoft.com/download), and, for the companion app, JDK 17+ and the Android SDK (platform 36, build-tools 36). The companion build uses the Gradle wrapper (Gradle 9.8, AGP 9.4 with built-in Kotlin, no AndroidX).
 
 ```powershell
 tools\fetch-vendor.ps1                      # downloads scrcpy 4.1 (+ adb), verifies SHA-256
+tools\build-companion.ps1                   # builds the Android companion APK (bundled into the app)
 dotnet build windows\Tandem.App -p:Platform=x64
 dotnet test windows\Tandem.Core.Tests
 ```
+
+If the companion APK isn't built, the app still builds and works; only notifications setup is unavailable.
 
 The app is unpackaged and self-contained, so the output runs without the Windows App Runtime or .NET installed.
 
@@ -53,6 +69,8 @@ dotnet run --project windows\Tandem.DeviceCheck -- files          # mkdir, 32 MB
 dotnet run --project windows\Tandem.DeviceCheck -- clip-watch 20  # print phone clipboard changes
 dotnet run --project windows\Tandem.DeviceCheck -- clip-set "hi"  # set the phone clipboard
 dotnet run --project windows\Tandem.DeviceCheck -- clip-access    # is HyperOS blocking phone -> PC?
+dotnet run --project windows\Tandem.DeviceCheck -- companion-install android\app\build\outputs\apk\release\app-release.apk
+dotnet run --project windows\Tandem.DeviceCheck -- notif-watch 30 --test   # print notifications, send + reply to a test one
 ```
 
 Errors and connection events are logged to `%LOCALAPPDATA%\Tandem\logs`. Clipboard and file contents are never logged.
@@ -62,17 +80,21 @@ Errors and connection events are logged to `%LOCALAPPDATA%\Tandem\logs`. Clipboa
 1. **Developer options:** Settings → About phone → tap *Build number* 7 times. On Xiaomi/HyperOS, tap *OS version*.
 2. In Developer options, turn on **Wireless debugging**. Xiaomi/Redmi/POCO also need **USB debugging (Security settings)**, or the phone blocks mouse and keyboard control.
 3. In Tandem, scan the QR code with *Wireless debugging → Pair device with QR code*.
+4. For notifications, click **Set up** on the Phone notifications card. On Xiaomi/Redmi/POCO, turn on **Install via USB** in Developer options first. Otherwise the phone refuses the install, and Tandem tells you so.
+
+**Also using KDE Connect or Phone Link?** Turn off their notification sync, or you'll get every notification twice.
 
 **Xiaomi / HyperOS clipboard:** HyperOS has its own clipboard-privacy switch, which can hide phone-side copies from adb's shell user. PC → phone still works when it's on. Tandem detects this and shows an **Allow** button on the clipboard card. The button runs `appops set com.android.shell 10053 allow`, and `… ignore` undoes it. This was verified on a Xiaomi Pad 7 (HyperOS 3.0, Android 16) and matches [scrcpy#5961](https://github.com/Genymobile/scrcpy/issues/5961).
 
 ## Project layout
 
 ```
-windows/Tandem.Core         adb host, pairing, device tracking, files, mirroring, clipboard protocol (no UI)
-windows/Tandem.Core.Tests   xUnit tests for parsers and the scrcpy wire protocol
+windows/Tandem.Core         adb host, pairing, devices, files, mirroring, clipboard + companion protocols (no UI)
+windows/Tandem.Core.Tests   xUnit tests for parsers and both wire protocols
 windows/Tandem.DeviceCheck  CLI smoke tests against a real, connected phone
-windows/Tandem.App          WinUI 3 app
-tools/                      vendor fetch + icon generator
+windows/Tandem.App          WinUI 3 app (tray, toasts, pages)
+android/                    Kotlin companion app (notifications)
+tools/                      vendor fetch, companion build, icon generator
 ```
 
 ## Credits

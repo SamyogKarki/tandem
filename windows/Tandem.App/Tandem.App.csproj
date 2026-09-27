@@ -22,6 +22,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <ApplicationIcon>Assets\tandem.ico</ApplicationIcon>
+    <!-- Program.cs provides Main (single instance) -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <Version>0.1.0</Version>
   </PropertyGroup>
 
@@ -51,6 +53,15 @@
   </ItemGroup>
   <Target Name="CheckVendoredTools" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('$(ScrcpyVendorDir)scrcpy.exe')" Text="scrcpy $(ScrcpyVersion) is missing. Run tools\fetch-vendor.ps1 from the repo root, then build again." />
+    <Warning Condition="!Exists('$(CompanionApk)')" Text="The Android companion APK isn't built, so notifications setup will be unavailable. Run tools\build-companion.ps1, then build again." />
   </Target>
+
+  <!-- The Android companion (notifications), built by tools\build-companion.ps1 -->
+  <PropertyGroup>
+    <CompanionApk>$(MSBuildThisFileDirectory)..\..\android\app\build\outputs\apk\release\app-release.apk</CompanionApk>
+  </PropertyGroup>
+  <ItemGroup Condition="Exists('$(CompanionApk)')">
+    <None Include="$(CompanionApk)" Link="tools\companion\tandem-companion.apk" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
 
 </Project>

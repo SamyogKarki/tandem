@@ -15,7 +15,19 @@
         <StackPanel MaxWidth="820" Padding="40,28,40,40" Spacing="8">
             <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" Margin="0,0,0,12" />
 
-            <TextBlock Text="Screen mirroring" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,4" />
+            <TextBlock Text="General" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,8,0,4" />
+            <Border Style="{StaticResource CardStyle}">
+                <Grid Style="{StaticResource SettingRow}">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Start Tandem when you sign in to Windows" />
+                        <TextBlock Text="Starts quietly in the system tray so your phone connects on its own." Style="{StaticResource SecondaryText}" FontSize="12" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="StartupToggle" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Toggled="Startup_Toggled" />
+                </Grid>
+            </Border>
+
+            <TextBlock Text="Screen mirroring" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,4" />
             <Border Style="{StaticResource CardStyle}">
                 <StackPanel Spacing="4">
                     <Grid Style="{StaticResource SettingRow}">

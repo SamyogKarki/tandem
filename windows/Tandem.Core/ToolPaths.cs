@@ -14,14 +14,21 @@ public sealed record ToolPaths(string AdbExe, string ScrcpyExe, string ScrcpySer
 
     public string ScrcpyDirectory => Path.GetDirectoryName(ScrcpyExe)!;
 
+    /// <summary>The Android companion APK (notifications); null if this build doesn't include it.</summary>
+    public string? CompanionApk { get; init; }
+
     /// <summary>Looks for tools\scrcpy next to the running app.</summary>
     public static ToolPaths Locate(string appDirectory)
     {
         var dir = Path.Combine(appDirectory, "tools", "scrcpy");
+        var apk = Path.Combine(appDirectory, "tools", "companion", "tandem-companion.apk");
         var paths = new ToolPaths(
             Path.Combine(dir, "adb.exe"),
             Path.Combine(dir, "scrcpy.exe"),
-            Path.Combine(dir, "scrcpy-server"));
+            Path.Combine(dir, "scrcpy-server"))
+        {
+            CompanionApk = File.Exists(apk) ? apk : null,
+        };
 
         var missing = new[] { paths.AdbExe, paths.ScrcpyExe, paths.ScrcpyServer }.Where(p => !File.Exists(p)).ToList();
         if (missing.Count > 0)

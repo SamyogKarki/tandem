@@ -18,12 +18,51 @@ public sealed partial class HomePage : Page
         AudioToggle.IsOn = s.MirrorAudio;
         ScreenOffToggle.IsOn = s.MirrorScreenOff;
         ClipboardToggle.IsOn = s.ShareClipboard;
+        NotificationsToggle.IsOn = s.ShowNotifications;
         _loading = false;
     }
 
     public PhoneSession Session => AppServices.Current.Session;
     public MirrorService Mirror => AppServices.Current.Mirror;
     public ClipboardService Clipboard => AppServices.Current.Clipboard;
+    public NotificationService Notifications => AppServices.Current.Notifications;
+
+    private async void SetUpNotifications_Click(object sender, RoutedEventArgs e)
+    {
+        var phone = Session.Name.Length > 0 ? Session.Name : "your phone";
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Get your phone's notifications here",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = $"Tandem will install its small companion app (about 50 KB) on {phone} and allow it to read notifications, " +
+                       "so they can appear on this PC and you can reply from here.\n\n" +
+                       "Notifications only travel over your paired, encrypted connection to this PC. " +
+                       "You can remove the app from the phone at any time.",
+            },
+            PrimaryButtonText = "Install",
+            CloseButtonText = "Not now",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        await Notifications.SetUpAsync();
+        _loading = true;
+        NotificationsToggle.IsOn = AppServices.Current.Settings.Current.ShowNotifications;
+        _loading = false;
+    }
+
+    private async void TestNotification_Click(object sender, RoutedEventArgs e) => await Notifications.SendTestAsync();
+
+    private void NotificationsToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        var s = AppServices.Current.Settings;
+        if (s.Current.ShowNotifications == NotificationsToggle.IsOn) return;
+        s.Current.ShowNotifications = NotificationsToggle.IsOn;
+        s.Save();
+    }
 
     public string MirrorLabel(bool mirroring) => mirroring ? "Stop mirroring" : "Mirror screen";
     public string MirrorGlyph(bool mirroring) => mirroring ? "\uE71A" : "\uE7F4";

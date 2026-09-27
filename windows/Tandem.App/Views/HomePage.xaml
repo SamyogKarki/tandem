@@ -74,20 +74,53 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
+
+                    <!-- Notifications -->
+                    <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource IconBadgeStyle}">
+                                    <FontIcon Glyph="&#xEA8F;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Phone notifications" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <TextBlock Text="{x:Bind Notifications.StatusText, Mode=OneWay}" Style="{StaticResource SecondaryText}" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <ProgressRing IsActive="{x:Bind Notifications.IsBusy, Mode=OneWay}" Width="20" Height="20"
+                                                  Visibility="{x:Bind app:Ui.Show(Notifications.IsBusy), Mode=OneWay}" />
+                                    <Button Content="{x:Bind Notifications.SetUpLabel, Mode=OneWay}" Style="{StaticResource AccentButtonStyle}" Click="SetUpNotifications_Click"
+                                            Visibility="{x:Bind app:Ui.Show(Notifications.CanSetUp), Mode=OneWay}" />
+                                    <ToggleSwitch x:Name="NotificationsToggle" OnContent="On" OffContent="Off" MinWidth="0"
+                                                  Toggled="NotificationsToggle_Toggled"
+                                                  Visibility="{x:Bind app:Ui.Show(Notifications.IsSetUp), Mode=OneWay}" />
+                                </StackPanel>
+                            </Grid>
+                            <HyperlinkButton Content="Send a test notification" Padding="0" Margin="54,-4,0,0" Click="TestNotification_Click"
+                                             Visibility="{x:Bind app:Ui.Show(Notifications.IsConnected), Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
 
                     <!-- Mirroring options -->
                     <Border Style="{StaticResource CardStyle}">
                         <StackPanel Spacing="12">
-                            <StackPanel Orientation="Horizontal" Spacing="14">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <Border Style="{StaticResource IconBadgeStyle}">
                                     <FontIcon Glyph="&#xE7F4;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                 </Border>
-                                <StackPanel VerticalAlignment="Center">
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Screen mirroring" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <TextBlock Text="Use your phone with mouse and keyboard." Style="{StaticResource SecondaryText}" />
                                 </StackPanel>
-                            </StackPanel>
+                            </Grid>
                             <ToggleSwitch x:Name="AudioToggle" Header="Play phone sound on this PC" OnContent="On" OffContent="Off" Toggled="MirrorOption_Toggled" />
                             <ToggleSwitch x:Name="ScreenOffToggle" Header="Turn the phone's screen off while mirroring" OnContent="On" OffContent="Off" Toggled="MirrorOption_Toggled" />
                         </StackPanel>
@@ -96,15 +129,16 @@
                     <!-- Clipboard -->
                     <Border Grid.Column="1" Style="{StaticResource CardStyle}">
                         <StackPanel Spacing="12">
-                            <StackPanel Orientation="Horizontal" Spacing="14">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <Border Style="{StaticResource IconBadgeStyle}">
                                     <FontIcon Glyph="&#xE77F;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                                 </Border>
-                                <StackPanel VerticalAlignment="Center">
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Shared clipboard" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <TextBlock Text="{x:Bind Clipboard.StatusText, Mode=OneWay}" Style="{StaticResource SecondaryText}" MaxWidth="300" />
+                                    <TextBlock Text="{x:Bind Clipboard.StatusText, Mode=OneWay}" Style="{StaticResource SecondaryText}" />
                                 </StackPanel>
-                            </StackPanel>
+                            </Grid>
                             <ToggleSwitch x:Name="ClipboardToggle" Header="Share copied text between phone and PC" OnContent="On" OffContent="Off" Toggled="Clipboard_Toggled" />
                             <InfoBar Severity="Warning" IsClosable="False"
                                      IsOpen="{x:Bind Clipboard.PhoneCopyBlocked, Mode=OneWay}"
@@ -121,7 +155,7 @@
                     </Border>
 
                     <!-- Files -->
-                    <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
+                    <Border Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource CardStyle}">
                         <Grid ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />

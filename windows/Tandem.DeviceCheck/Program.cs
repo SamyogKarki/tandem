@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using Tandem.Core;
 using Tandem.Core.Adb;
 using Tandem.Core.Clipboard;
+using Tandem.Core.Companion;
 using Tandem.Core.Devices;
 using Tandem.Core.Files;
 
@@ -38,6 +39,49 @@ switch (args.FirstOrDefault())
             PrintServerLog(bridge);
         }
         break;
+    case "companion-status":
+        Console.WriteLine(await CompanionInstaller.GetStatusAsync(phone));
+        break;
+    case "companion-install":
+    {
+        var secret = CompanionProtocol.NewSecret();
+        await CompanionInstaller.InstallAsync(phone, Path.GetFullPath(args[1]), secret,
+            new Progress<string>(s => Console.WriteLine("  " + s)));
+        new CompanionSecrets().Set(phone.Info.HardwareSerial, secret);
+        Console.WriteLine("Installed and paired: " + await CompanionInstaller.GetStatusAsync(phone));
+        break;
+    }
+    case "notif-watch":
+    {
+        var secret = new CompanionSecrets().Get(phone.Info.HardwareSerial) ?? throw new InvalidOperationException("Run companion-install first.");
+        await using var link = await CompanionConnection.ConnectAsync(phone, secret);
+        Console.WriteLine($"Connected to companion {link.AppVersion}");
+        link.Snapshot += items =>
+        {
+            Console.WriteLine($"SNAPSHOT: {items.Count} notification(s)");
+            foreach (var n in items) Console.WriteLine($"  [{n.AppName}] {n.Title}: {Trim(n.Text)}");
+        };
+        link.Posted += n => Console.WriteLine($"POSTED [{n.AppName}] {n.Title}: {Trim(n.Text)} (actions: {string.Join(", ", n.Actions.Select(a => a.Title + (a.IsReply ? "*" : "")))}; image {(n.Image is null ? "no" : n.Image.Length + " B")})");
+        link.Removed += key => Console.WriteLine($"REMOVED {key}");
+        link.AppIcon += (pkg, png) => Console.WriteLine($"ICON {pkg} {png.Length} B");
+        link.PhoneError += e => Console.WriteLine($"PHONE ERROR {e}");
+        PhoneNotification? test = null;
+        link.Posted += n => { if (n.Title == "Tandem test") test = n; };
+        link.Start();
+        if (args.Contains("--test"))
+        {
+            await Task.Delay(1000);
+            await link.SendTestNotificationAsync();
+            await Task.Delay(3000);
+            if (test?.ReplyAction is { } reply)
+            {
+                Console.WriteLine("Replying to the test notification...");
+                await link.ReplyAsync(test.Key, reply.Index, "hello from the PC");
+            }
+        }
+        await Task.Delay(TimeSpan.FromSeconds(args.Length > 1 && int.TryParse(args[1], out var s) ? s : 15));
+        break;
+    }
     case "clip-access":
         Console.WriteLine("HyperOS blocks phone -> PC clipboard: " + await HyperOsClipboardAccess.IsBlockedAsync(phone));
         break;
@@ -118,6 +162,8 @@ static async Task CheckFilesAsync(PhoneConnection phone)
         Check("cleanup", await fs.StatAsync(dir) is null);
     }
 }
+
+static string Trim(string s) => s.Length > 70 ? s[..70] + "…" : s.Replace('\n', ' ');
 
 static void PrintServerLog(ClipboardBridge bridge)
 {

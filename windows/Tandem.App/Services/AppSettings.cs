@@ -13,6 +13,10 @@ public sealed class AppSettings
     public bool MirrorAlwaysOnTop { get; set; }
     public bool ShareClipboard { get; set; } = true;
     public bool ShowHiddenFiles { get; set; }
+    public bool ShowNotifications { get; set; } = true;
+    public bool StartWithWindows { get; set; } = true;
+    /// <summary>Whether we've told the user that closing the window keeps Tandem in the tray.</summary>
+    public bool TrayHintShown { get; set; }
     public string DownloadFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Tandem");
 
