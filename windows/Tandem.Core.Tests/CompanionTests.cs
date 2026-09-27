@@ -88,6 +88,37 @@ public class CompanionTests
         Assert.Equal(new CompanionStatus(false, null, false), CompanionInstaller.ParseStatus("__TANDEM_SPLIT__\nnull\n"));
     }
 
+    [Fact]
+    public void Bundled_version_matches_the_android_build()
+    {
+        // Walk up from the test output to the repo root, then read the companion's versionName.
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "android", "app", "build.gradle.kts"))) dir = dir.Parent;
+        Assert.NotNull(dir);
+        var gradle = File.ReadAllText(Path.Combine(dir!.FullName, "android", "app", "build.gradle.kts"));
+        var match = System.Text.RegularExpressions.Regex.Match(gradle, "versionName = \"([^\"]+)\"");
+        Assert.True(match.Success);
+        Assert.Equal(match.Groups[1].Value, CompanionInstaller.BundledVersion);
+    }
+
+    [Theory]
+    // Real output from the Xiaomi Pad 7 right after an update, when HyperOS refused to start the listener:
+    [InlineData("MIUIOP(10008): ignore; time=+1h2m12s943ms ago; rejectTime=+1m33s184ms ago", true)]
+    [InlineData("MIUIOP(10008): allow; time=+1h2m33s627ms ago; rejectTime=+1m53s868ms ago", false)]
+    [InlineData("Error: Unknown operation string: 10008", false)] // not a Xiaomi phone
+    public void Xiaomi_autostart_block_is_detected(string output, bool blocked) =>
+        Assert.Equal(blocked, CompanionInstaller.IsMiuiOpBlocked(output, CompanionInstaller.MiuiAutoStartOp));
+
+    [Fact]
+    public void Older_companions_are_flagged_for_update()
+    {
+        Assert.True(CompanionInstaller.IsOutdated("0.0.1"));
+        Assert.False(CompanionInstaller.IsOutdated(CompanionInstaller.BundledVersion));
+        Assert.False(CompanionInstaller.IsOutdated("99.0.0"));
+        Assert.False(CompanionInstaller.IsOutdated(null));
+        Assert.False(CompanionInstaller.IsOutdated("garbage"));
+    }
+
     [Theory]
     [InlineData("Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]", "Install via USB")]
     [InlineData("Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]", "Uninstall")]

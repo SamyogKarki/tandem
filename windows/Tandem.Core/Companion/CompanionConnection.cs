@@ -59,6 +59,14 @@ public sealed class CompanionConnection : IAsyncDisposable
 
     public static async Task<CompanionConnection> ConnectAsync(PhoneConnection phone, string secretHex, CancellationToken ct = default)
     {
+        try
+        {
+            await CompanionInstaller.WakeAsync(phone, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Older companions have no wake receiver; connecting may still work.
+        }
         var port = await phone.Adb.Client.CreateForwardAsync(phone.Device, "tcp:0", "localabstract:" + SocketName, true, ct)
             .ConfigureAwait(false);
         var tcp = new TcpClient { NoDelay = true };
@@ -106,8 +114,49 @@ public sealed class CompanionConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>Ping interval; the phone drops connections that are silent for 60 s.</summary>
+    public static readonly TimeSpan PingInterval = TimeSpan.FromSeconds(20);
+    /// <summary>No message (not even a pong) for this long means the phone side is gone.</summary>
+    public static readonly TimeSpan SilenceLimit = TimeSpan.FromSeconds(50);
+
+    private long _lastReceivedTicks = Environment.TickCount64;
+
     /// <summary>Starts delivering events. Call after subscribing, so the snapshot isn't missed.</summary>
-    public void Start() => _readTask ??= Task.Run(ReadLoopAsync);
+    public void Start()
+    {
+        _readTask ??= Task.Run(ReadLoopAsync);
+        _ = Task.Run(HeartbeatAsync);
+    }
+
+    /// <summary>
+    /// A connection can die without either side noticing (phone app killed, Wi-Fi drop, a
+    /// write stuck on a dead peer). Ping regularly and give up on a silent phone, so the
+    /// service reconnects instead of waiting forever.
+    /// </summary>
+    private async Task HeartbeatAsync()
+    {
+        try
+        {
+            while (!_cts.IsCancellationRequested)
+            {
+                await Task.Delay(PingInterval, _cts.Token).ConfigureAwait(false);
+                var silentFor = TimeSpan.FromMilliseconds(Environment.TickCount64 - Interlocked.Read(ref _lastReceivedTicks));
+                if (silentFor > SilenceLimit)
+                {
+                    await CloseAsync(new TimeoutException("The phone stopped answering.")).ConfigureAwait(false);
+                    return;
+                }
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                await SendAsync(new JsonObject { ["t"] = "ping" }, timeout.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+        catch (Exception e)
+        {
+            await CloseAsync(e).ConfigureAwait(false);
+        }
+    }
 
     public Task DismissAsync(string key, CancellationToken ct = default) =>
         SendAsync(new JsonObject { ["t"] = "dismiss", ["key"] = key }, ct);
@@ -147,6 +196,7 @@ public sealed class CompanionConnection : IAsyncDisposable
                     error = new IOException("The phone closed the connection.");
                     break;
                 }
+                Interlocked.Exchange(ref _lastReceivedTicks, Environment.TickCount64);
                 Dispatch(msg);
             }
         }

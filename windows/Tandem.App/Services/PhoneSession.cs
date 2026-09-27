@@ -11,13 +11,29 @@ namespace Tandem.App.Services;
 public sealed partial class PhoneSession : ObservableObject
 {
     private readonly DispatcherQueue _ui;
+    private readonly SettingsStore _settings;
     private CancellationTokenSource? _batteryCts;
+    private CancellationTokenSource? _controlCts;
 
-    public PhoneSession(DeviceTracker tracker, DispatcherQueue ui)
+    public PhoneSession(DeviceTracker tracker, SettingsStore settings, DispatcherQueue ui)
     {
         _ui = ui;
+        _settings = settings;
         tracker.Changed += snapshot => _ui.TryEnqueue(() => Apply(snapshot));
     }
+
+    /// <summary>
+    /// Xiaomi phones block mouse/keyboard control until "USB debugging (Security settings)" is on.
+    /// While blocked we re-check every couple of seconds, so the Home page notices the switch
+    /// being flipped without the user having to press anything.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ControlBlocked { get; private set; }
+
+    /// <summary>Raised when a blocked phone becomes controllable (for a "you're all set" message).</summary>
+    public event Action? ControlUnlocked;
+
+    public BrandGuide Brand => Phone is { } p ? BrandGuide.ForManufacturer(p.Info.Manufacturer) : BrandGuide.ById(_settings.Current.PhoneBrand);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsConnected), nameof(Name), nameof(Details), nameof(TransportGlyph))]
@@ -66,11 +82,50 @@ public sealed partial class PhoneSession : ObservableObject
 
         Phone = next;
         Battery = null;
+        ControlBlocked = false;
         _batteryCts?.Cancel();
+        _controlCts?.Cancel();
         if (next is not null)
         {
             _batteryCts = new CancellationTokenSource();
             _ = PollBatteryAsync(next, _batteryCts.Token);
+            _controlCts = new CancellationTokenSource();
+            _ = WatchControlAsync(next, _controlCts.Token);
+
+            // Remember the phone: next time Home says "Looking for …" instead of the full guide.
+            _settings.Current.LastPhoneName = next.Info.Name;
+            _settings.Current.PhoneBrand = BrandGuide.ForManufacturer(next.Info.Manufacturer).Id;
+            _settings.Save();
+        }
+    }
+
+    private async Task WatchControlAsync(PhoneConnection phone, CancellationToken ct)
+    {
+        var wasBlocked = false;
+        while (!ct.IsCancellationRequested)
+        {
+            bool allowed;
+            try
+            {
+                allowed = await PhoneChecks.CanControlAsync(phone, ct);
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                return; // can't tell; don't nag
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            _ui.TryEnqueue(() =>
+            {
+                if (ct.IsCancellationRequested) return;
+                ControlBlocked = !allowed;
+                if (allowed && wasBlocked) ControlUnlocked?.Invoke();
+            });
+            if (allowed) return;
+            wasBlocked = true;
+            try { await Task.Delay(TimeSpan.FromSeconds(2), ct); } catch (OperationCanceledException) { return; }
         }
     }
 

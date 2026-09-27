@@ -28,23 +28,35 @@ class NotificationBridgeService : NotificationListenerService() {
 
     private val main = Handler(Looper.getMainLooper())
     private var link: PcLink? = null
-    /** True once the PC has said hello; nothing is sent before that. */
+    /** The PC connection that completed the hello handshake; nothing is sent before that. */
     @Volatile
-    private var ready = false
+    private var ready: PcLink.Connection? = null
     private val iconsSent = HashSet<String>()
 
     override fun onListenerConnected() {
         instance = this
         link?.stop()
         link = PcLink(
-            onMessage = { msg -> main.post { handle(msg) } },
-            onDisconnected = { main.post { ready = false } },
+            onMessage = { connection, msg ->
+                val queued = android.os.SystemClock.elapsedRealtime()
+                main.post {
+                    val waited = android.os.SystemClock.elapsedRealtime() - queued
+                    if (waited > 500) Log.w(TAG, "main thread was busy for $waited ms before ${msg.optString("t")}")
+                    handle(connection, msg)
+                }
+            },
+            onClosed = { connection ->
+                main.post {
+                    if (ready === connection) ready = null
+                    if (link?.current == null) LinkService.stopSoon()
+                }
+            },
         ).also { it.start() }
     }
 
     override fun onListenerDisconnected() {
         instance = null
-        ready = false
+        ready = null
         link?.stop()
         link = null
     }
@@ -55,61 +67,65 @@ class NotificationBridgeService : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap?) {
-        if (!ready) return
+        val connection = ready?.takeUnless { it.closed } ?: return
         val json = NotificationMapper.toJson(this, sbn, rankingMap) ?: return
-        sendIconIfNeeded(sbn.packageName)
-        link?.send(JSONObject().put("t", "posted").put("n", json))
+        sendIconIfNeeded(connection, sbn.packageName)
+        connection.send(JSONObject().put("t", "posted").put("n", json))
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap?, reason: Int) {
-        if (!ready) return
-        link?.send(JSONObject().put("t", "removed").put("key", sbn.key))
+        ready?.takeUnless { it.closed }?.send(JSONObject().put("t", "removed").put("key", sbn.key))
     }
 
-    private fun handle(msg: JSONObject) {
+    private fun handle(connection: PcLink.Connection, msg: JSONObject) {
         try {
             when (msg.optString("t")) {
-                "hello" -> onHello(msg)
+                "hello" -> onHello(connection, msg)
                 "dismiss" -> cancelNotification(msg.getString("key"))
                 "action" -> find(msg.getString("key"))?.let { runAction(it, msg.getInt("i"), null) }
                 "reply" -> find(msg.getString("key"))?.let { runAction(it, msg.getInt("i"), msg.getString("text")) }
                 "test" -> TestNotifications.post(this)
-                "ping" -> link?.send(JSONObject().put("t", "pong"))
+                "ping" -> connection.send(JSONObject().put("t", "pong"))
                 else -> Log.w(TAG, "Unknown message ${msg.optString("t")}")
             }
         } catch (e: Exception) {
             Log.w(TAG, "Couldn't handle ${msg.optString("t")}", e)
-            link?.send(JSONObject().put("t", "error").put("message", e.message ?: e.javaClass.simpleName))
+            connection.send(JSONObject().put("t", "error").put("message", e.message ?: e.javaClass.simpleName))
         }
     }
 
     /** Proves to the PC that this is the companion it paired with, then sends what's on screen now. */
-    private fun onHello(msg: JSONObject) {
+    private fun onHello(connection: PcLink.Connection, msg: JSONObject) {
+        val started = android.os.SystemClock.elapsedRealtime()
+        Log.i(TAG, "hello from PC")
+        // Normally already running (the PC wakes us first); make sure, so HyperOS won't freeze us mid-session.
+        LinkService.start(this)
         val nonce = msg.optString("nonce")
         iconsSent.clear()
-        link?.send(
+        connection.send(
             JSONObject()
                 .put("t", "hello")
                 .put("v", PROTOCOL_VERSION)
                 .put("app", BuildConfigInfo.versionName(this))
                 .put("proof", Pairing.proof(this, nonce))
         )
-        ready = true
+        ready = connection
         val items = JSONArray()
         val rankings = currentRanking
         activeNotifications?.forEach { sbn ->
             NotificationMapper.toJson(this, sbn, rankings)?.let {
-                sendIconIfNeeded(sbn.packageName)
+                sendIconIfNeeded(connection, sbn.packageName)
                 items.put(it)
             }
         }
-        link?.send(JSONObject().put("t", "snapshot").put("items", items))
+        connection.send(JSONObject().put("t", "snapshot").put("items", items))
+        Log.i(TAG, "snapshot of ${items.length()} queued in ${android.os.SystemClock.elapsedRealtime() - started} ms")
     }
 
-    private fun sendIconIfNeeded(pkg: String) {
+    private fun sendIconIfNeeded(connection: PcLink.Connection, pkg: String) {
         if (!iconsSent.add(pkg)) return
         val png = NotificationMapper.appIconBase64(this, pkg) ?: return
-        link?.send(JSONObject().put("t", "icon").put("pkg", pkg).put("png", png))
+        connection.send(JSONObject().put("t", "icon").put("pkg", pkg).put("png", png))
     }
 
     private fun find(key: String): StatusBarNotification? =

@@ -83,6 +83,7 @@ public sealed partial class NotificationService : ObservableObject
     {
         if (e.PropertyName != nameof(PhoneSession.Phone)) return;
         _failures = 0;
+        _unansweredStreak = 0;
         _ = RestartAsync();
     }
 
@@ -93,6 +94,7 @@ public sealed partial class NotificationService : ObservableObject
         Detail = null;
 
         var phone = _session.Phone;
+        CompanionOutdated = false;
         if (phone is null) { State = NotificationsState.NoPhone; return; }
         if (_tools.CompanionApk is null) { State = NotificationsState.Unavailable; return; }
         if (!_settings.Current.ShowNotifications) { State = NotificationsState.Off; return; }
@@ -105,8 +107,11 @@ public sealed partial class NotificationService : ObservableObject
             if (generation != _generation) { await link.DisposeAsync(); return; }
             Attach(link, phone, generation);
             _failures = 0;
+            _unansweredStreak = 0;
+            CompanionOutdated = CompanionInstaller.IsOutdated(link.AppVersion);
             State = NotificationsState.Connected;
-            CrashLog.Info($"notifications: connected to companion {link.AppVersion} on {phone.Info.Name}");
+            CrashLog.Info($"notifications: connected to companion {link.AppVersion} on {phone.Info.Name}" +
+                          (CompanionOutdated ? $" (update to {CompanionInstaller.BundledVersion} available)" : ""));
         }
         catch (CompanionException e) when (e.Problem is CompanionProblem.NotPaired or CompanionProblem.Untrusted)
         {
@@ -145,9 +150,66 @@ public sealed partial class NotificationService : ObservableObject
             State = NotificationsState.Problem;
             return;
         }
+
+        // Xiaomi: with Autostart off, HyperOS refuses to start the listener at all (e.g. after an
+        // update or a force-stop). Turn it back on and restart right away.
+        var autostartBlocked = false;
+        try { autostartBlocked = await CompanionInstaller.IsAutostartBlockedAsync(phone); } catch (Exception) { }
+        if (generation != _generation) return;
+        if (autostartBlocked && DateTime.UtcNow - _lastRestart > TimeSpan.FromSeconds(30))
+        {
+            _lastRestart = DateTime.UtcNow;
+            CrashLog.Info("notifications: Xiaomi Autostart is off for the phone app; turning it on and restarting it");
+            try
+            {
+                await CompanionInstaller.RestartAsync(phone);
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception e)
+            {
+                CrashLog.Info("notifications: restart failed: " + e.Message);
+            }
+            if (generation != _generation) return;
+            _ = RestartAsync();
+            return;
+        }
+
+        // Installed and allowed, yet silent: the app is stuck or Android stopped it. Restart it
+        // ourselves (once in a while) before bothering the user.
+        _unansweredStreak++;
+        if (_unansweredStreak == 2 && DateTime.UtcNow - _lastRestart > TimeSpan.FromMinutes(2))
+        {
+            _lastRestart = DateTime.UtcNow;
+            CrashLog.Info("notifications: companion not answering; restarting it");
+            try
+            {
+                await CompanionInstaller.RestartAsync(phone);
+                await Task.Delay(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception e)
+            {
+                CrashLog.Info("notifications: restart failed: " + e.Message);
+            }
+            if (generation != _generation) return;
+            _ = RestartAsync();
+            return;
+        }
+        if (_unansweredStreak >= 5)
+        {
+            Detail = "The Tandem app on your phone isn't responding. Choose Try again to reinstall it.";
+            State = NotificationsState.Problem;
+            return;
+        }
         State = NotificationsState.Connecting;
         RetryLater(generation);
     }
+
+    private int _unansweredStreak;
+    private DateTime _lastRestart = DateTime.MinValue;
+
+    /// <summary>The phone runs an older companion than the one bundled with this PC app.</summary>
+    [ObservableProperty]
+    public partial bool CompanionOutdated { get; private set; }
 
     private void RetryLater(int generation)
     {

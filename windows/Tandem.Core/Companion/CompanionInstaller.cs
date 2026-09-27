@@ -14,11 +14,13 @@ public sealed record CompanionStatus(bool Installed, string? Version, bool Liste
 public static partial class CompanionInstaller
 {
     public const string PackageName = "io.github.samyogkarki.tandem";
+    /// <summary>versionName of the APK this build bundles; must match android/app/build.gradle.kts (a test checks).</summary>
+    public const string BundledVersion = "0.2.2";
     public const string ListenerComponent = PackageName + "/" + PackageName + ".NotificationBridgeService";
     private const string PairReceiver = PackageName + "/.PairReceiver";
     private const string PairAction = PackageName + ".PAIR";
     /// <summary>Xiaomi's "Autostart" permission (MIUI app-op AUTO_START).</summary>
-    private const int MiuiAutoStartOp = 10008;
+    public const int MiuiAutoStartOp = 10008;
 
     public static async Task<CompanionStatus> GetStatusAsync(PhoneConnection phone, CancellationToken ct = default)
     {
@@ -58,11 +60,17 @@ public static partial class CompanionInstaller
                  {
                      $"dumpsys deviceidle whitelist +{PackageName}",
                      $"cmd appops set {PackageName} RUN_ANY_IN_BACKGROUND allow",
-                     $"appops set {PackageName} {MiuiAutoStartOp} allow",
                  })
         {
             try { await phone.ShellAsync(command + " 2>/dev/null", ct).ConfigureAwait(false); }
             catch (Exception) when (!ct.IsCancellationRequested) { }
+        }
+        if (PhoneChecks.IsXiaomi(phone.Info))
+        {
+            // Xiaomi's Security app resets Autostart to off a moment after an install or update,
+            // overwriting anything set too early; let it do that first, then set and verify.
+            await Task.Delay(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
+            await EnsureAutostartAsync(phone, ct).ConfigureAwait(false);
         }
 
         progress?.Report("Linking it to this PC…");
@@ -78,6 +86,59 @@ public static partial class CompanionInstaller
             throw new AdbCommandException(
                 "Your phone didn't allow notification access. On the phone, open Settings → Notifications → Notification access (or Device & app notifications) and turn on Tandem.");
     }
+
+    /// <summary>
+    /// Restarts a companion that's installed and allowed but not answering: stop the process,
+    /// then withdraw and re-grant notification access, which makes Android bind (and so start)
+    /// the listener again.
+    /// </summary>
+    public static async Task RestartAsync(PhoneConnection phone, CancellationToken ct = default)
+    {
+        await phone.ShellAsync($"am force-stop {PackageName}", ct).ConfigureAwait(false);
+        // On Xiaomi, Android may only start the listener again if Autostart is allowed.
+        if (PhoneChecks.IsXiaomi(phone.Info)) await EnsureAutostartAsync(phone, ct).ConfigureAwait(false);
+        await phone.ShellAsync($"cmd notification disallow_listener {ListenerComponent}", ct).ConfigureAwait(false);
+        await phone.ShellCheckedAsync($"cmd notification allow_listener {ListenerComponent}", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Xiaomi's "Autostart" (MIUI app-op 10008). When it's off, HyperOS refuses to (re)start the
+    /// notification listener ("AutoStartManagerService: Reject service"), so the companion stays
+    /// dead after an update or a restart. Sets it and reads it back, retrying if something resets it.
+    /// </summary>
+    public static async Task<bool> EnsureAutostartAsync(PhoneConnection phone, CancellationToken ct = default)
+    {
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            await phone.ShellAsync($"appops set {PackageName} {MiuiAutoStartOp} allow 2>/dev/null", ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(1.5), ct).ConfigureAwait(false);
+            if (!await IsAutostartBlockedAsync(phone, ct).ConfigureAwait(false)) return true;
+        }
+        return false;
+    }
+
+    public static async Task<bool> IsAutostartBlockedAsync(PhoneConnection phone, CancellationToken ct = default) =>
+        PhoneChecks.IsXiaomi(phone.Info) &&
+        IsMiuiOpBlocked(await phone.ShellAsync($"appops get {PackageName} {MiuiAutoStartOp}", ct).ConfigureAwait(false), MiuiAutoStartOp);
+
+    /// <summary>Parses `appops get` output such as "MIUIOP(10008): ignore; rejectTime=…".</summary>
+    public static bool IsMiuiOpBlocked(string appopsOutput, int op) =>
+        Regex.IsMatch(appopsOutput, $@"MIUIOP\({op}\):\s*(ignore|deny|errored)", RegexOptions.IgnoreCase);
+
+    /// <summary>True when the phone runs an older companion than the one this PC app bundles.</summary>
+    public static bool IsOutdated(string? installedVersion) =>
+        Version.TryParse(installedVersion, out var installed) &&
+        Version.TryParse(BundledVersion, out var bundled) &&
+        installed < bundled;
+
+    /// <summary>
+    /// Wakes the companion before connecting. HyperOS freezes idle background apps, and a
+    /// frozen app can't answer its socket; delivering a broadcast thaws it, and the receiver
+    /// starts the foreground service that keeps it thawed while the PC is connected.
+    /// Only the adb shell (DUMP permission) can send this.
+    /// </summary>
+    public static Task WakeAsync(PhoneConnection phone, CancellationToken ct = default) =>
+        phone.ShellAsync($"am broadcast -n {PackageName}/.WakeReceiver -a {PackageName}.WAKE -f 0x20", ct);
 
     public static async Task OpenNotificationAccessSettingsAsync(PhoneConnection phone, CancellationToken ct = default) =>
         await phone.ShellAsync("am start -a android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS", ct).ConfigureAwait(false);

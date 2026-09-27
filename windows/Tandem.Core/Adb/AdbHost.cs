@@ -80,6 +80,37 @@ public sealed partial class AdbHost(ToolPaths tools)
             throw new AdbCommandException("Could not connect: " + r.Combined);
     }
 
+    /// <summary>
+    /// Removes port forwards left behind by a previous Tandem that didn't exit cleanly
+    /// (crash, killed from Task Manager). Leftovers keep dead connections alive on the phone,
+    /// which then stops answering new ones. Only Tandem forwards to these socket names:
+    /// the companion's and the clipboard bridge's (scrcpy's own mirroring uses reverse tunnels).
+    /// </summary>
+    public async Task<int> RemoveStaleForwardsAsync(CancellationToken ct = default)
+    {
+        var list = await RunAsync(["forward", "--list"], TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+        var removed = 0;
+        foreach (var (serial, local) in ParseStaleForwards(list.StdOut))
+        {
+            var r = await RunAsync(["-s", serial, "forward", "--remove", local], TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+            if (r.ExitCode == 0) removed++;
+        }
+        return removed;
+    }
+
+    /// <summary>Lines of `adb forward --list` ("serial local remote") that point at Tandem's sockets.</summary>
+    public static IEnumerable<(string Serial, string Local)> ParseStaleForwards(string forwardList)
+    {
+        foreach (var line in forwardList.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 3) continue;
+            var remote = parts[2];
+            if (remote == "localabstract:tandem_companion" || remote.StartsWith("localabstract:scrcpy_", StringComparison.Ordinal))
+                yield return (parts[0], parts[1]);
+        }
+    }
+
     public static string ParsePairOutput(string output)
     {
         var m = PairSuccessRegex().Match(output);

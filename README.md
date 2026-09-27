@@ -8,6 +8,7 @@ Tandem connects over **Wireless debugging**, which is built into Android 11 and 
 
 | | Status |
 |---|---|
+| **Guided setup**: pick your phone brand and get step-by-step instructions with the exact names on your phone's screen and a drawn phone showing where to tap. Tandem checks Xiaomi's extra switches itself and opens the right settings screen on the phone | ✅ |
 | **Pair by QR code**: scan once from Developer options. A pairing code or a USB cable also works | ✅ |
 | **Screen mirroring & control**: mouse, keyboard and phone audio, with the phone's screen optionally off | ✅ (via [scrcpy](https://github.com/Genymobile/scrcpy)) |
 | **Phone files**: browse storage and SD card, open, rename, delete, new folder | ✅ |
@@ -42,6 +43,17 @@ Windows PC                                            Android phone
   - **Proving it's the companion:** the PC checks an HMAC-SHA256 proof over a random nonce, using a secret handed over at setup. The secret goes through `am broadcast` to a receiver guarded by the `DUMP` permission, which only the adb shell holds. So no other app on the phone can pose as the companion.
   - **One-click setup:** runs `adb install -g`, `cmd notification allow_listener`, and the battery and autostart exemptions. The user never sideloads an APK or digs through settings.
   - **What reaches the PC:** ongoing notifications (music, downloads), silent ones, group summaries and "local only" ones are skipped. Replies fill the app's own `RemoteInput`, exactly as the phone's notification shade does.
+  - **Staying reachable on Xiaomi.** HyperOS's `GreezeManager` freezes idle background apps within seconds, and a frozen app can't answer its socket. Tandem handles that in three ways:
+    - **Wake before connecting:** before each connection, the PC sends a DUMP-guarded wake broadcast, which thaws the app.
+    - **Stay awake while connected:** a `connectedDevice` foreground service keeps the app unfrozen while the PC is connected, and for 2 minutes after. Its silent "Connected to your PC" notification is the one Android requires.
+    - **Keep Autostart on:** Xiaomi's Security app switches Autostart off after every install or update, and HyperOS then refuses to start the listener. Tandem re-enables it (MIUI app-op 10008) and checks it stuck.
+  - **Self-healing:**
+    - connections are independent, so a stuck write can never block a new one;
+    - the PC pings every 20 s and drops silent links;
+    - port forwards left by a crashed PC session are cleaned up at startup;
+    - a companion that stops answering is restarted over adb.
+
+    Tested by killing and relaunching the PC app repeatedly: 8/8 reconnects in about 1.5 s, and 1.7 s after the phone app had been frozen.
 - **Windows notifications:** Windows App SDK 2.5.1's `AppNotificationManager` is broken in self-contained unpackaged apps ([WindowsAppSDK#6774](https://github.com/microsoft/WindowsAppSDK/issues/6774)). Tandem uses the Windows toast API directly instead:
   - a per-user AUMID registration;
   - a COM toast activator, `INotificationActivationCallback`, for clicks and replies;
@@ -76,6 +88,8 @@ dotnet run --project windows\Tandem.DeviceCheck -- notif-watch 30 --test   # pri
 Errors and connection events are logged to `%LOCALAPPDATA%\Tandem\logs`. Clipboard and file contents are never logged.
 
 ## Phone setup (one time)
+
+Tandem walks through all of this itself on first launch; this list is for reference.
 
 1. **Developer options:** Settings → About phone → tap *Build number* 7 times. On Xiaomi/HyperOS, tap *OS version*.
 2. In Developer options, turn on **Wireless debugging**. Xiaomi/Redmi/POCO also need **USB debugging (Security settings)**, or the phone blocks mouse and keyboard control.

@@ -17,6 +17,10 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; } = true;
     /// <summary>Whether we've told the user that closing the window keeps Tandem in the tray.</summary>
     public bool TrayHintShown { get; set; }
+    /// <summary>Name of the last phone that connected; when set, a disconnected Home shows "Looking for …" rather than the full setup guide.</summary>
+    public string? LastPhoneName { get; set; }
+    /// <summary>BrandGuide id, for brand-specific wording ("OS version" vs "Build number").</summary>
+    public string? PhoneBrand { get; set; }
     public string DownloadFolder { get; set; } =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "Tandem");
 

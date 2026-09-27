@@ -46,6 +46,23 @@ public class ParsingTests
     }
 
     [Fact]
+    public void Only_tandems_own_forwards_are_considered_stale()
+    {
+        const string list = """
+            adb-9d397901-NZFVkZ._adb-tls-connect._tcp tcp:60793 localabstract:tandem_companion
+            adb-9d397901-NZFVkZ._adb-tls-connect._tcp tcp:55687 localabstract:scrcpy_38095c4f
+            emulator-5554 tcp:9222 localabstract:chrome_devtools_remote
+            R58M123 tcp:8081 tcp:8081
+            """;
+
+        var stale = AdbHost.ParseStaleForwards(list).ToList();
+
+        Assert.Equal(
+            [("adb-9d397901-NZFVkZ._adb-tls-connect._tcp", "tcp:60793"), ("adb-9d397901-NZFVkZ._adb-tls-connect._tcp", "tcp:55687")],
+            stale);
+    }
+
+    [Fact]
     public void Qr_payload_matches_android_studio_format_and_avoids_delimiters()
     {
         for (var i = 0; i < 50; i++)

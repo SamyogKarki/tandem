@@ -19,7 +19,7 @@ public sealed class AppServices
         Adb = new AdbHost(Tools);
         Tracker = new DeviceTracker(Adb);
         Pairing = new PairingService(Adb);
-        Session = new PhoneSession(Tracker, ui);
+        Session = new PhoneSession(Tracker, Settings, ui);
         Clipboard = new ClipboardService(Session, Settings, Tools, ui);
         Mirror = new MirrorService(Tools, Settings, Clipboard, ui);
         Transfers = new TransferService(ui);
@@ -50,6 +50,15 @@ public sealed class AppServices
     public async Task StartAsync()
     {
         await Adb.StartServerAsync(_cts.Token);
+        try
+        {
+            var removed = await Adb.RemoveStaleForwardsAsync(_cts.Token);
+            if (removed > 0) CrashLog.Info($"startup: removed {removed} port forwards left by an earlier Tandem");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            CrashLog.Info("startup: couldn't clean up old port forwards: " + e.Message);
+        }
         Session.AdbReady = true;
         _ = Task.Run(() => Tracker.RunAsync(_cts.Token));
     }

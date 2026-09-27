@@ -16,15 +16,21 @@ import java.util.concurrent.Executors
  * is rejected by uid before a single byte is read.
  *
  * Wire format, both directions: [u32 big-endian length][UTF-8 JSON object].
+ *
+ * Each accepted connection is independent (own reader, own writer). A dead PC connection can
+ * leave a write blocked forever, so an old connection is torn down on its own thread and can
+ * never hold up accepting or answering the next one. The PC pings every 20 s; a connection
+ * that stays silent for [IDLE_TIMEOUT_MS] is dropped.
  */
 class PcLink(
-    private val onMessage: (JSONObject) -> Unit,
-    private val onDisconnected: () -> Unit,
+    private val onMessage: (Connection, JSONObject) -> Unit,
+    private val onClosed: (Connection) -> Unit,
 ) {
     companion object {
         const val SOCKET_NAME = "tandem_companion"
         private const val TAG = "TandemLink"
         private const val MAX_FRAME = 8 * 1024 * 1024
+        private const val IDLE_TIMEOUT_MS = 60_000
         private const val SHELL_UID = 2000 // adbd runs as shell on user builds
         private const val ROOT_UID = 0
 
@@ -34,13 +40,80 @@ class PcLink(
             private set
     }
 
+    inner class Connection(private val socket: LocalSocket) {
+        private val writer = Executors.newSingleThreadExecutor { Thread(it, "tandem-write") }
+        private val output = DataOutputStream(socket.outputStream.buffered())
+        @Volatile
+        var closed = false
+            private set
+
+        fun start() {
+            socket.soTimeout = IDLE_TIMEOUT_MS
+            Thread(::readLoop, "tandem-read").start()
+        }
+
+        fun send(message: JSONObject) {
+            if (closed) return
+            try {
+                writer.execute {
+                    if (closed) return@execute
+                    try {
+                        val bytes = message.toString().toByteArray(Charsets.UTF_8)
+                        output.writeInt(bytes.size)
+                        output.write(bytes)
+                        output.flush()
+                    } catch (e: IOException) {
+                        Log.i(TAG, "PC went away while writing: ${e.message}")
+                        close()
+                    }
+                }
+            } catch (_: java.util.concurrent.RejectedExecutionException) {
+                // Closed concurrently; nothing to do.
+            }
+        }
+
+        private fun readLoop() {
+            try {
+                val input = DataInputStream(socket.inputStream.buffered())
+                while (!closed) {
+                    val length = input.readInt()
+                    if (length !in 0..MAX_FRAME) throw IOException("Bad frame length $length")
+                    val bytes = ByteArray(length)
+                    input.readFully(bytes)
+                    onMessage(this, JSONObject(String(bytes, Charsets.UTF_8)))
+                }
+            } catch (e: Exception) {
+                if (!closed) Log.i(TAG, "PC connection ended: ${e.message}")
+            }
+            close()
+        }
+
+        /** Idempotent. shutdown() first: unlike close(), it wakes threads blocked in read/write. */
+        fun close() {
+            synchronized(this) {
+                if (closed) return
+                closed = true
+            }
+            try { socket.shutdownInput() } catch (_: IOException) {}
+            try { socket.shutdownOutput() } catch (_: IOException) {}
+            try { socket.close() } catch (_: IOException) {}
+            writer.shutdownNow()
+            if (current === this) {
+                current = null
+                connected = false
+            }
+            onClosed(this)
+        }
+    }
+
     @Volatile
     private var running = false
     private var server: LocalServerSocket? = null
+
+    /** The PC connection in use; newer connections replace older ones. */
     @Volatile
-    private var client: LocalSocket? = null
-    private var output: DataOutputStream? = null
-    private val writer = Executors.newSingleThreadExecutor { Thread(it, "tandem-write") }
+    var current: Connection? = null
+        private set
 
     fun start() {
         if (running) return
@@ -57,7 +130,7 @@ class PcLink(
     fun stop() {
         if (!running) return
         running = false
-        closeClient()
+        current?.let { old -> Thread({ old.close() }, "tandem-close").start() }
         // LocalServerSocket.accept() doesn't return on close(); poke it with a connection.
         try {
             LocalSocket().use { it.connect(LocalSocketAddress(SOCKET_NAME)) }
@@ -70,20 +143,9 @@ class PcLink(
         server = null
     }
 
-    /** Queues a message for the PC; silently dropped when nobody is connected. */
+    /** Sends to the current PC connection, if any. */
     fun send(message: JSONObject) {
-        writer.execute {
-            val out = output ?: return@execute
-            try {
-                val bytes = message.toString().toByteArray(Charsets.UTF_8)
-                out.writeInt(bytes.size)
-                out.write(bytes)
-                out.flush()
-            } catch (e: IOException) {
-                Log.i(TAG, "PC went away while writing: ${e.message}")
-                closeClient()
-            }
-        }
+        current?.send(message)
     }
 
     private fun acceptLoop() {
@@ -95,55 +157,29 @@ class PcLink(
                 break
             }
             if (!running) {
-                socket.close()
+                try { socket.close() } catch (_: IOException) {}
                 break
             }
-            val uid = try {
-                socket.peerCredentials.uid
-            } catch (_: IOException) {
-                -1
+            try {
+                val uid = try { socket.peerCredentials.uid } catch (_: IOException) { -1 }
+                if (uid != SHELL_UID && uid != ROOT_UID) {
+                    Log.w(TAG, "Rejected connection from uid $uid")
+                    socket.close()
+                    continue
+                }
+                val connection = Connection(socket)
+                val old = current
+                current = connection
+                connected = true
+                connection.start()
+                Log.i(TAG, "PC connected" + if (old != null) " (replacing an older connection)" else "")
+                // Never tear the old one down on this thread: a close can block on a dead peer.
+                if (old != null) Thread({ old.close() }, "tandem-close").start()
+            } catch (e: Exception) {
+                // Whatever went wrong with this connection, keep accepting new ones.
+                Log.w(TAG, "Couldn't set up a PC connection", e)
+                try { socket.close() } catch (_: IOException) {}
             }
-            if (uid != SHELL_UID && uid != ROOT_UID) {
-                Log.w(TAG, "Rejected connection from uid $uid")
-                socket.close()
-                continue
-            }
-            // One PC at a time: a new connection (e.g. after the PC app restarted) replaces the old one.
-            closeClient()
-            client = socket
-            output = DataOutputStream(socket.outputStream.buffered())
-            connected = true
-            Thread({ readLoop(socket) }, "tandem-read").start()
-        }
-    }
-
-    private fun readLoop(socket: LocalSocket) {
-        try {
-            val input = DataInputStream(socket.inputStream.buffered())
-            while (running && client === socket) {
-                val length = input.readInt()
-                if (length !in 0..MAX_FRAME) throw IOException("Bad frame length $length")
-                val bytes = ByteArray(length)
-                input.readFully(bytes)
-                onMessage(JSONObject(String(bytes, Charsets.UTF_8)))
-            }
-        } catch (e: Exception) {
-            Log.i(TAG, "PC connection ended: ${e.message}")
-        }
-        if (client === socket) {
-            closeClient()
-            onDisconnected()
-        }
-    }
-
-    private fun closeClient() {
-        val socket = client ?: return
-        client = null
-        output = null
-        connected = false
-        try {
-            socket.close()
-        } catch (_: IOException) {
         }
     }
 }

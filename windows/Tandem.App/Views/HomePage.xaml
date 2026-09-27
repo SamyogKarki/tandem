@@ -4,12 +4,12 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:app="using:Tandem.App"
-    xmlns:views="using:Tandem.App.Views">
+    xmlns:setup="using:Tandem.App.Views.Setup">
 
     <Grid>
-        <views:PairingView Visibility="{x:Bind app:Ui.Hide(Session.IsConnected), Mode=OneWay}" />
+        <setup:SetupGuideView Visibility="{x:Bind GuideVisibility(Session.IsConnected), Mode=OneWay}" />
 
-        <ScrollViewer Visibility="{x:Bind app:Ui.Show(Session.IsConnected), Mode=OneWay}">
+        <ScrollViewer Visibility="{x:Bind DashboardVisibility(Session.IsConnected), Mode=OneWay}">
             <StackPanel MaxWidth="920" Padding="40,28,40,40" Spacing="16">
 
                 <!-- Phone -->
@@ -55,6 +55,38 @@
                         </Button>
                     </Grid>
                 </Border>
+
+                <!-- Xiaomi: finish setup for mouse & keyboard control. Disappears by itself once the switch is on. -->
+                <Border Style="{StaticResource CardStyle}" BorderBrush="{ThemeResource AccentFillColorDefaultBrush}" BorderThickness="2"
+                        Visibility="{x:Bind app:Ui.Show(Session.ControlBlocked), Mode=OneWay}">
+                    <Grid ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource IconBadgeStyle}" VerticalAlignment="Top">
+                            <FontIcon Glyph="&#xE962;" FontSize="18" Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Spacing="10">
+                            <TextBlock Text="One more step: use your mouse and keyboard on the phone" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+                            <TextBlock TextWrapping="Wrap" Style="{StaticResource SecondaryText}">
+                                Xiaomi, Redmi and POCO phones need one extra switch before a PC can tap and type on them.
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap">
+                                1. Click the button below. Developer options opens on your phone.<LineBreak />
+                                2. Turn on <Bold>USB debugging (Security settings)</Bold> and follow the prompts. Xiaomi may ask you to sign in to your Mi account.
+                            </TextBlock>
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                <Button Content="Open Developer options on my phone" Style="{StaticResource AccentButtonStyle}" Click="OpenDevOptions_Click" />
+                                <ProgressRing IsActive="{x:Bind Session.ControlBlocked, Mode=OneWay}" Width="16" Height="16" />
+                                <TextBlock Text="Waiting for the switch…" VerticalAlignment="Center" Style="{StaticResource SecondaryText}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <InfoBar x:Name="SetupDoneBar" Severity="Success" IsOpen="False" Visibility="Collapsed"
+                         Title="All set" Message="You can now use your mouse and keyboard on your phone." Closed="InfoBar_Closed" />
 
                 <!-- Collapsed (not just closed) until shown, so they don't add StackPanel spacing -->
                 <InfoBar x:Name="InputBlockedBar" Severity="Warning" IsOpen="False" Visibility="Collapsed"
@@ -103,8 +135,12 @@
                                                   Visibility="{x:Bind app:Ui.Show(Notifications.IsSetUp), Mode=OneWay}" />
                                 </StackPanel>
                             </Grid>
-                            <HyperlinkButton Content="Send a test notification" Padding="0" Margin="54,-4,0,0" Click="TestNotification_Click"
-                                             Visibility="{x:Bind app:Ui.Show(Notifications.IsConnected), Mode=OneWay}" />
+                            <StackPanel Orientation="Horizontal" Spacing="20" Margin="54,-4,0,0"
+                                        Visibility="{x:Bind app:Ui.Show(Notifications.IsConnected), Mode=OneWay}">
+                                <HyperlinkButton Content="Send a test notification" Padding="0" Click="TestNotification_Click" />
+                                <HyperlinkButton Content="Update the phone app" Padding="0" Click="UpdateCompanion_Click"
+                                                 Visibility="{x:Bind app:Ui.Show(Notifications.CompanionOutdated), Mode=OneWay}" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 

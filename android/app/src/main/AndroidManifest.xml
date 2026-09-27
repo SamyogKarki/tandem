@@ -2,6 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- LinkService: keeps the app from being frozen while the PC is connected (see LinkService.kt).
+         "connectedDevice" foreground services must also hold a connectivity permission. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <!-- App names and icons for notifications from any app (sideloaded app; no store policy applies). -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
@@ -47,5 +52,19 @@
         <receiver
             android:name=".TestReplyReceiver"
             android:exported="false" />
+
+        <service
+            android:name=".LinkService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <receiver
+            android:name=".WakeReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="io.github.samyogkarki.tandem.WAKE" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
