@@ -15,7 +15,7 @@ public static partial class CompanionInstaller
 {
     public const string PackageName = "io.github.samyogkarki.tandem";
     /// <summary>versionName of the APK this build bundles; must match android/app/build.gradle.kts (a test checks).</summary>
-    public const string BundledVersion = "0.2.2";
+    public const string BundledVersion = "0.3.3";
     public const string ListenerComponent = PackageName + "/" + PackageName + ".NotificationBridgeService";
     private const string PairReceiver = PackageName + "/.PairReceiver";
     private const string PairAction = PackageName + ".PAIR";
@@ -51,6 +51,10 @@ public static partial class CompanionInstaller
         if (!install.Combined.Contains("Success", StringComparison.Ordinal))
             throw new AdbCommandException(ExplainInstallFailure(install.Combined));
 
+        // Lets the phone app turn Wireless debugging back on after a restart. Best effort: some
+        // phones (Xiaomi without "USB debugging (Security settings)") refuse; the rest still works.
+        await GrantReconnectAsync(phone, ct).ConfigureAwait(false);
+
         progress?.Report("Allowing it to read notifications…");
         await phone.ShellCheckedAsync($"cmd notification allow_listener {ListenerComponent}", ct).ConfigureAwait(false);
 
@@ -74,11 +78,7 @@ public static partial class CompanionInstaller
         }
 
         progress?.Report("Linking it to this PC…");
-        // -f 0x20 = FLAG_INCLUDE_STOPPED_PACKAGES: a freshly installed app counts as stopped.
-        var pair = await phone.ShellAsync(
-            $"am broadcast -n {PairReceiver} -a {PairAction} -f 0x20 --es secret {secretHex}", ct).ConfigureAwait(false);
-        if (!pair.Contains("data=\"paired\"", StringComparison.Ordinal))
-            throw new AdbCommandException("The Tandem app on your phone didn't accept this PC. " + pair.Trim());
+        await PairAsync(phone, secretHex, ct).ConfigureAwait(false);
 
         progress?.Report("Checking…");
         var status = await GetStatusAsync(phone, ct).ConfigureAwait(false);
@@ -86,6 +86,43 @@ public static partial class CompanionInstaller
             throw new AdbCommandException(
                 "Your phone didn't allow notification access. On the phone, open Settings → Notifications → Notification access (or Device & app notifications) and turn on Tandem.");
     }
+
+    /// <summary>
+    /// Hands the companion a new shared secret. Safe to repeat at any time: the broadcast is
+    /// addressed to our own package's receiver and only the adb shell may send it, so an app
+    /// squatting on the socket can never learn the secret.
+    /// </summary>
+    public static async Task PairAsync(PhoneConnection phone, string secretHex, CancellationToken ct = default)
+    {
+        // -f 0x20 = FLAG_INCLUDE_STOPPED_PACKAGES: a freshly installed app counts as stopped.
+        var pair = await phone.ShellAsync(
+            $"am broadcast -n {PairReceiver} -a {PairAction} -f 0x20 --es secret {secretHex}", ct).ConfigureAwait(false);
+        if (!pair.Contains("data=\"paired\"", StringComparison.Ordinal))
+            throw new AdbCommandException("The Tandem app on your phone didn't accept this PC. " + pair.Trim());
+    }
+
+    /// <summary>
+    /// Grants the phone app WRITE_SECURE_SETTINGS, which it uses for one thing only: switching
+    /// Wireless debugging back on after a restart or a Wi-Fi drop, on Wi-Fi where this PC has
+    /// connected before. Android lets the adb shell grant this "development" permission.
+    /// </summary>
+    public static async Task<bool> GrantReconnectAsync(PhoneConnection phone, CancellationToken ct = default)
+    {
+        try
+        {
+            var output = await phone.ShellAsync(
+                $"pm grant {PackageName} android.permission.WRITE_SECURE_SETTINGS 2>&1; echo __TANDEM_RC=$?", ct).ConfigureAwait(false);
+            return IsGrantSuccess(output);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    public static bool IsGrantSuccess(string output) =>
+        output.Contains("__TANDEM_RC=0", StringComparison.Ordinal) &&
+        !output.Contains("Exception", StringComparison.Ordinal);
 
     /// <summary>
     /// Restarts a companion that's installed and allowed but not answering: stop the process,

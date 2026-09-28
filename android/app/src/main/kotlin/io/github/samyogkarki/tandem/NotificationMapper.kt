@@ -29,11 +29,12 @@ object NotificationMapper {
 
         // Skip what would be noise on a PC: group summaries (the children carry the content),
         // ongoing ones (music, downloads, navigation), notifications the app marked as
-        // phone-only, and silent ones. Calls are ongoing too; they come in Phase 2b.
+        // phone-only, and silent ones. Incoming calls are ongoing too, but they're the point.
+        val incomingCall = isIncomingCall(n)
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return null
-        if (n.flags and Notification.FLAG_LOCAL_ONLY != 0) return null
-        if (sbn.isOngoing) return null
-        if (rankings != null) {
+        if (n.flags and Notification.FLAG_LOCAL_ONLY != 0 && !incomingCall) return null
+        if (sbn.isOngoing && !incomingCall) return null
+        if (rankings != null && !incomingCall) {
             val ranking = NotificationListenerService.Ranking()
             if (rankings.getRanking(sbn.key, ranking) &&
                 ranking.importance < NotificationManager.IMPORTANCE_DEFAULT
@@ -44,6 +45,14 @@ object NotificationMapper {
             ?: extras.getCharSequence(Notification.EXTRA_TITLE))?.toString()?.trim().orEmpty()
         var text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT)
             ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()?.trim().orEmpty()
+
+        // Calls: the caller's name (CallStyle keeps it in EXTRA_CALL_PERSON).
+        if (incomingCall) {
+            @Suppress("DEPRECATION")
+            val caller = (extras.getParcelable(Notification.EXTRA_CALL_PERSON) as? android.app.Person)?.name?.toString()
+            if (!caller.isNullOrBlank()) title = caller
+            if (text.isEmpty()) text = "Incoming call"
+        }
 
         // Chat apps: show the newest message, with the sender's name in group chats.
         lastMessage(extras)?.let { (sender, message) ->
@@ -75,6 +84,23 @@ object NotificationMapper {
             .put("cat", n.category.orEmpty())
             .put("img", n.getLargeIcon()?.loadDrawable(context)?.let(::toPngBase64))
             .put("actions", actions)
+            .put("call", if (incomingCall) "incoming" else null)
+    }
+
+    /**
+     * A ringing call: category CALL and either CallStyle's "incoming" type (Android 12+) or,
+     * for apps that don't use CallStyle, an Answer/Accept button. Ongoing calls don't count.
+     */
+    private fun isIncomingCall(n: Notification): Boolean {
+        if (n.category != Notification.CATEGORY_CALL) return false
+        return when (n.extras.getInt(Notification.EXTRA_CALL_TYPE, 0)) {
+            1 -> true // Notification.CallStyle.CALL_TYPE_INCOMING
+            0 -> n.actions?.any { action ->
+                val title = action.title?.toString()?.lowercase().orEmpty()
+                "answer" in title || "accept" in title
+            } == true
+            else -> false // ongoing or screening
+        }
     }
 
     private fun lastMessage(extras: android.os.Bundle): Pair<String?, String>? {

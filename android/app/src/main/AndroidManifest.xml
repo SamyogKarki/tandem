@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- LinkService: keeps the app from being frozen while the PC is connected (see LinkService.kt).
@@ -9,6 +10,12 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <!-- App names and icons for notifications from any app (sideloaded app; no store policy applies). -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Reconnect after a restart (WirelessDebugging.kt): turn Wireless debugging back on when a
+         remembered Wi-Fi connects. WRITE_SECURE_SETTINGS is granted by the PC over adb. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="false"
@@ -52,6 +59,28 @@
         <receiver
             android:name=".TestReplyReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".TestCallReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".WifiReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".AdbWifiJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".LinkService"

@@ -18,7 +18,8 @@ public sealed record PhoneNotification(
     DateTimeOffset When,
     string Category,
     byte[]? Image,
-    IReadOnlyList<NotificationAction> Actions)
+    IReadOnlyList<NotificationAction> Actions,
+    bool IsIncomingCall = false)
 {
     public NotificationAction? ReplyAction => Actions.FirstOrDefault(a => a.IsReply);
 
@@ -42,7 +43,8 @@ public sealed record PhoneNotification(
             DateTimeOffset.FromUnixTimeMilliseconds((long?)n["when"] ?? 0),
             (string?)n["cat"] ?? "",
             string.IsNullOrEmpty(img) ? null : Convert.FromBase64String(img),
-            actions);
+            actions,
+            (string?)n["call"] == "incoming");
     }
 }
 

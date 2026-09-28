@@ -47,7 +47,8 @@
                         </StackPanel>
 
                         <Button Grid.Column="2" VerticalAlignment="Center" Padding="18,10" Click="Mirror_Click"
-                                Style="{StaticResource AccentButtonStyle}">
+                                Style="{StaticResource AccentButtonStyle}"
+                                AutomationProperties.Name="{x:Bind MirrorLabel(Mirror.IsMirroring), Mode=OneWay}">
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <FontIcon Glyph="{x:Bind MirrorGlyph(Mirror.IsMirroring), Mode=OneWay}" FontSize="16" />
                                 <TextBlock Text="{x:Bind MirrorLabel(Mirror.IsMirroring), Mode=OneWay}" />

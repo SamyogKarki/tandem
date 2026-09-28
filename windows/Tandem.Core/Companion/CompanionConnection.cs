@@ -15,6 +15,18 @@ public enum CompanionProblem
     Untrusted,
 }
 
+/// <summary>Can the phone turn Wireless debugging back on by itself after a restart?</summary>
+public enum ReconnectState
+{
+    /// <summary>Phone app older than 0.3.</summary>
+    Unsupported,
+    /// <summary>The phone app lacks WRITE_SECURE_SETTINGS (the PC grants it over adb).</summary>
+    NoPermission,
+    /// <summary>The user turned it off in the phone app.</summary>
+    SwitchedOff,
+    On,
+}
+
 public sealed class CompanionException(CompanionProblem problem, string message) : Exception(message)
 {
     public CompanionProblem Problem { get; } = problem;
@@ -103,8 +115,10 @@ public sealed class CompanionConnection : IAsyncDisposable
             if (!CompanionProtocol.ProofMatches(secretHex, nonce, proof))
                 throw new CompanionException(CompanionProblem.Untrusted, "The app answering on your phone couldn't prove it's Tandem. Run setup again.");
 
-            var connection = new CompanionConnection(phone, tcp, port, (string?)reply["app"] ?? "?");
-            return connection;
+            return new CompanionConnection(phone, tcp, port, (string?)reply["app"] ?? "?")
+            {
+                Reconnect = ParseReconnect(reply["reconnect"]),
+            };
         }
         catch
         {
@@ -170,6 +184,31 @@ public sealed class CompanionConnection : IAsyncDisposable
     public Task SendTestNotificationAsync(CancellationToken ct = default) =>
         SendAsync(new JsonObject { ["t"] = "test" }, ct);
 
+    /// <summary>Has the phone show a pretend incoming call (companion 0.3+), to try call alerts without a real call.</summary>
+    public Task SendTestCallAsync(CancellationToken ct = default) =>
+        SendAsync(new JsonObject { ["t"] = "testCall" }, ct);
+
+    /// <summary>Clears every dismissable notification on the phone, like "Clear all" in its shade.</summary>
+    public Task DismissAllAsync(CancellationToken ct = default) =>
+        SendAsync(new JsonObject { ["t"] = "dismissAll" }, ct);
+
+    /// <summary>Whether the phone app turns Wireless debugging back on after a restart (companion 0.3+).</summary>
+    public ReconnectState Reconnect { get; private set; }
+    public event Action<ReconnectState>? ReconnectChanged;
+
+    /// <summary>After granting the phone app its permission: have it start watching Wi-Fi and report back.</summary>
+    public Task RearmReconnectAsync(CancellationToken ct = default) =>
+        SendAsync(new JsonObject { ["t"] = "rearm" }, ct);
+
+    public static ReconnectState ParseReconnect(JsonNode? value) =>
+        (value is JsonValue v && v.TryGetValue<string>(out var s) ? s : null) switch
+    {
+        "on" => ReconnectState.On,
+        "off" => ReconnectState.SwitchedOff,
+        "noPermission" => ReconnectState.NoPermission,
+        _ => ReconnectState.Unsupported,
+    };
+
     private async Task SendAsync(JsonObject message, CancellationToken ct)
     {
         await _writeLock.WaitAsync(ct).ConfigureAwait(false);
@@ -224,6 +263,10 @@ public sealed class CompanionConnection : IAsyncDisposable
             case "icon":
                 if ((string?)msg["pkg"] is { } pkg && (string?)msg["png"] is { } png)
                     AppIcon?.Invoke(pkg, Convert.FromBase64String(png));
+                break;
+            case "reconnect":
+                Reconnect = ParseReconnect(msg["state"]);
+                ReconnectChanged?.Invoke(Reconnect);
                 break;
             case "error":
                 PhoneError?.Invoke((string?)msg["message"] ?? "Unknown error on the phone");

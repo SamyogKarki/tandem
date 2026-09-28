@@ -11,8 +11,8 @@ android {
         // Wireless debugging (how Tandem connects) exists from Android 11.
         minSdk = 30
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.2.2"
+        versionCode = 7
+        versionName = "0.3.3"
     }
 
     buildTypes {

@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.widget.Button
+import android.widget.Switch
 import android.widget.TextView
 
 /** A small status screen. Setup itself happens from the Tandem app on the PC. */
@@ -25,6 +26,13 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.test_button).setOnClickListener { TestNotifications.post(this) }
         findViewById<Button>(R.id.access_button).setOnClickListener {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        findViewById<Switch>(R.id.reconnect_switch).apply {
+            isChecked = WirelessDebugging.isEnabled(this@MainActivity)
+            setOnCheckedChangeListener { _, on ->
+                WirelessDebugging.setEnabled(this@MainActivity, on)
+                render()
+            }
         }
     }
 
@@ -52,5 +60,13 @@ class MainActivity : Activity() {
             }
         )
         findViewById<Button>(R.id.access_button).visibility = if (listening) Button.GONE else Button.VISIBLE
+        val canReconnect = WirelessDebugging.canWrite(this)
+        findViewById<Switch>(R.id.reconnect_switch).isEnabled = canReconnect
+        findViewById<TextView>(R.id.status_reconnect).text = when {
+            !canReconnect -> getString(R.string.status_reconnect_unavailable)
+            WirelessDebugging.isEnabled(this) ->
+                getString(R.string.status_reconnect_on, WirelessDebugging.trustedNetworkCount(this))
+            else -> getString(R.string.status_reconnect_off)
+        }
     }
 }

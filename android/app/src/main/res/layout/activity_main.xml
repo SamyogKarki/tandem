@@ -45,6 +45,21 @@
             android:layout_marginTop="8dp"
             android:textAppearance="@android:style/TextAppearance.DeviceDefault.Medium" />
 
+        <Switch
+            android:id="@+id/reconnect_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/reconnect_switch"
+            android:textAppearance="@android:style/TextAppearance.DeviceDefault.Medium" />
+
+        <TextView
+            android:id="@+id/status_reconnect"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@android:style/TextAppearance.DeviceDefault.Small" />
+
         <Button
             android:id="@+id/access_button"
             android:layout_width="wrap_content"

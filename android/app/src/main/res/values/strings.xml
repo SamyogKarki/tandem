@@ -18,4 +18,15 @@
     <string name="link_channel_description">Shown while your PC is connected, so your phone doesn\'t pause Tandem in the background.</string>
     <string name="link_notification_title">Connected to your PC</string>
     <string name="link_notification_text">Notifications and replies are being shared with Tandem on your PC.</string>
+    <string name="test_call_channel_name">Tandem pretend calls</string>
+    <string name="test_call_caller">Tandem (pretend call)</string>
+    <string name="test_call_ringing">Incoming call. Answer or decline it on your PC.</string>
+    <string name="test_call_ongoing">Call in progress. This is only a test.</string>
+    <string name="answer">Answer</string>
+    <string name="decline">Decline</string>
+    <string name="hang_up">Hang up</string>
+    <string name="reconnect_switch">Reconnect by itself after a restart</string>
+    <string name="status_reconnect_on">Turns Wireless debugging back on after a restart or when Wi-Fi drops, on Wi-Fi where your PC has connected (%1$d remembered). If you switch it off yourself, it stays off until you switch it on again.</string>
+    <string name="status_reconnect_off">Off. After a restart, turn on Wireless debugging yourself in Developer options.</string>
+    <string name="status_reconnect_unavailable">Not available yet. Your PC sets this up when it connects.</string>
 </resources>

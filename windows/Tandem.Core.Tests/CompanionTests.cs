@@ -74,6 +74,17 @@ public class CompanionTests
         Assert.Equal(new NotificationAction(0, "Reply", true), n.ReplyAction);
         Assert.Equal(2, n.Actions.Count);
         Assert.NotNull(n.Image);
+        Assert.False(n.IsIncomingCall);
+    }
+
+    [Fact]
+    public void Incoming_calls_are_flagged()
+    {
+        var json = JsonNode.Parse("""
+            {"key":"k","pkg":"com.whatsapp","app":"WhatsApp","title":"Mum","text":"Incoming voice call","when":0,"cat":"call",
+             "call":"incoming","actions":[{"i":0,"title":"Decline","reply":false},{"i":1,"title":"Answer","reply":false}]}
+            """)!.AsObject();
+        Assert.True(PhoneNotification.FromJson(json).IsIncomingCall);
     }
 
     [Fact]
@@ -125,4 +136,20 @@ public class CompanionTests
     [InlineData("something odd", "something odd")]
     public void Install_failures_are_explained(string output, string expectedFragment) =>
         Assert.Contains(expectedFragment, CompanionInstaller.ExplainInstallFailure(output));
+
+    [Theory]
+    [InlineData("\"on\"", ReconnectState.On)]
+    [InlineData("\"off\"", ReconnectState.SwitchedOff)]
+    [InlineData("\"noPermission\"", ReconnectState.NoPermission)]
+    [InlineData("null", ReconnectState.Unsupported)] // companion 0.2.x doesn't send it
+    [InlineData("true", ReconnectState.Unsupported)]
+    public void Reconnect_state_is_read_from_hello(string json, ReconnectState expected) =>
+        Assert.Equal(expected, CompanionConnection.ParseReconnect(JsonNode.Parse(json)));
+
+    [Theory]
+    [InlineData("__TANDEM_RC=0\n", true)]
+    [InlineData("Exception occurred while executing 'grant':\njava.lang.SecurityException: grantRuntimePermission: Neither user 2000 nor current process has android.permission.GRANT_RUNTIME_PERMISSIONS.\n__TANDEM_RC=255\n", false)]
+    [InlineData("java.lang.SecurityException: something\n__TANDEM_RC=0\n", false)]
+    public void Permission_grant_result_is_parsed(string output, bool granted) =>
+        Assert.Equal(granted, CompanionInstaller.IsGrantSuccess(output));
 }

@@ -32,7 +32,16 @@ public sealed partial class MainWindow : Window
         var session = AppServices.Current.Session;
         session.PropertyChanged += OnSessionChanged;
         FilesItem.IsEnabled = session.IsConnected;
+        AppServices.Current.Notifications.Items.CollectionChanged += (_, _) => UpdateBadge();
         Nav.SelectedItem = PhoneItem;
+    }
+
+    /// <summary>How many notifications are waiting on the phone, on the nav item.</summary>
+    private void UpdateBadge()
+    {
+        var count = AppServices.Current.Notifications.Items.Count;
+        NotificationsBadge.Value = count;
+        NotificationsBadge.Visibility = count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void ShowFatalError(string message)
@@ -63,6 +72,7 @@ public sealed partial class MainWindow : Window
         Nav.SelectedItem = tag switch
         {
             "files" => FilesItem,
+            "notifications" => NotificationsItem,
             "settings" => Nav.SettingsItem,
             _ => PhoneItem,
         };
@@ -75,6 +85,7 @@ public sealed partial class MainWindow : Window
             : (args.SelectedItem as NavigationViewItem)?.Tag switch
             {
                 "files" => typeof(FilesPage),
+                "notifications" => typeof(NotificationsPage),
                 _ => typeof(HomePage),
             };
         if (ContentFrame.CurrentSourcePageType != page)

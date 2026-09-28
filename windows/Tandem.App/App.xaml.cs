@@ -139,6 +139,11 @@ public partial class App : Application
                 s.Settings.Current.ShowNotifications = !s.Settings.Current.ShowNotifications;
                 s.Settings.Save();
             }, Checked: s.Settings.Current.ShowNotifications),
+            new(s.Notifications.IsPaused ? "Resume pop-ups" : "Pause pop-ups for 1 hour", () =>
+            {
+                if (s.Notifications.IsPaused) s.Notifications.Resume();
+                else s.Notifications.PauseFor(TimeSpan.FromHours(1));
+            }, Enabled: s.Settings.Current.ShowNotifications),
             TrayMenuItem.Separator,
             new("Quit Tandem", () => _ = ExitAsync()),
         ];

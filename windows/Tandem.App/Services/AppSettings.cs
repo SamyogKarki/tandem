@@ -14,6 +14,12 @@ public sealed class AppSettings
     public bool ShareClipboard { get; set; } = true;
     public bool ShowHiddenFiles { get; set; }
     public bool ShowNotifications { get; set; } = true;
+    /// <summary>Apps whose notifications stay on the phone: package → app name (for the "turned off" list).</summary>
+    public Dictionary<string, string> MutedApps { get; set; } = [];
+    /// <summary>No pop-ups until then (calls still ring). Null = not paused.</summary>
+    public DateTime? NotificationsPausedUntil { get; set; }
+    /// <summary>When off, pop-ups say only which app a notification is from (privacy on shared screens).</summary>
+    public bool ShowMessageText { get; set; } = true;
     public bool StartWithWindows { get; set; } = true;
     /// <summary>Whether we've told the user that closing the window keeps Tandem in the tray.</summary>
     public bool TrayHintShown { get; set; }

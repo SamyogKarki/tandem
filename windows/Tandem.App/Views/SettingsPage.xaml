@@ -75,6 +75,36 @@
                 </StackPanel>
             </Border>
 
+            <TextBlock Text="Phone notifications" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,4" />
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="4">
+                    <Grid Style="{StaticResource SettingRow}">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Show message text in pop-ups" />
+                            <TextBlock Text="Turn off if others can see your screen. Pop-ups then only say which app a notification is from." Style="{StaticResource SecondaryText}" FontSize="12" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="MessageTextToggle" Grid.Column="1" OnContent="" OffContent="" MinWidth="0" Toggled="MessageText_Toggled" />
+                    </Grid>
+                    <Grid Style="{StaticResource SettingRow}">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Incoming calls" />
+                            <TextBlock Text="Calls ring on this PC with Answer and Decline. You talk on the phone." Style="{StaticResource SecondaryText}" FontSize="12" />
+                        </StackPanel>
+                        <Button x:Name="TestCallButton" Grid.Column="1" Content="Try a pretend call" Click="TestCall_Click" VerticalAlignment="Center" />
+                    </Grid>
+                    <Grid Style="{StaticResource SettingRow}">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <FontIcon x:Name="ReconnectIcon" Glyph="&#xE895;" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Reconnect after your phone restarts" />
+                            <TextBlock x:Name="ReconnectText" Style="{StaticResource SecondaryText}" FontSize="12" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="Files" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,16,0,4" />
             <Border Style="{StaticResource CardStyle}">
                 <Grid Style="{StaticResource SettingRow}">

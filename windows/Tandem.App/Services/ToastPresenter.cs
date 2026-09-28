@@ -58,19 +58,26 @@ public sealed class ToastPresenter
     public static string IdFor(string key) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)))[..16];
 
-    public void Show(PhoneNotification n, string? appIconPath)
+    /// <param name="avatarPath">Sender photo saved to disk, if the notification has one.</param>
+    /// <param name="showText">False = privacy mode: only say which app it's from.</param>
+    public void Show(PhoneNotification n, string? appIconPath, string? avatarPath, bool showText)
     {
         if (_notifier is null) return;
+        if (n.IsIncomingCall)
+        {
+            ShowCall(n, appIconPath, avatarPath);
+            return;
+        }
         var id = IdFor(n.Key);
 
         var binding = new XElement("binding", new XAttribute("template", "ToastGeneric"),
-            new XElement("text", n.Title.Length > 0 ? n.Title : n.AppName),
-            new XElement("text", n.Text),
+            new XElement("text", showText ? (n.Title.Length > 0 ? n.Title : n.AppName) : n.AppName),
+            new XElement("text", showText ? n.Text : "New notification. Open Tandem to read it."),
             new XElement("text", new XAttribute("placement", "attribution"), n.AppName));
 
         // Sender photo (chat apps) in a circle, otherwise the app's icon.
-        if (n.Image is { Length: > 0 } image && SaveImage(image, id) is { } avatar)
-            binding.Add(Image(avatar, circle: true));
+        if (showText && avatarPath is not null)
+            binding.Add(Image(avatarPath, circle: true));
         else if (appIconPath is not null && File.Exists(appIconPath))
             binding.Add(Image(appIconPath, circle: false));
 
@@ -98,6 +105,50 @@ public sealed class ToastPresenter
         if (actions.HasElements) toast.Add(actions);
 
         ShowXml(toast, tag: id, group: IdFor(n.Package));
+    }
+
+    /// <summary>
+    /// An incoming call: stays on screen and rings until answered or declined, with the phone
+    /// app's own buttons (green for answer, red for decline). The call audio stays on the phone.
+    /// </summary>
+    private void ShowCall(PhoneNotification n, string? appIconPath, string? avatarPath)
+    {
+        var id = IdFor(n.Key);
+        var binding = new XElement("binding", new XAttribute("template", "ToastGeneric"),
+            new XElement("text", n.Title.Length > 0 ? n.Title : "Incoming call"),
+            new XElement("text", n.Text.Length > 0 ? n.Text : "Incoming call"),
+            new XElement("text", new XAttribute("placement", "attribution"), $"{n.AppName} · you talk on your phone"));
+        var picture = avatarPath ?? appIconPath;
+        if (picture is not null && File.Exists(picture)) binding.Add(Image(picture, circle: true));
+
+        var actions = new XElement("actions");
+        foreach (var action in n.Actions.Where(a => !a.IsReply && a.Title.Length > 0).Take(3))
+        {
+            var button = new XElement("action",
+                new XAttribute("content", action.Title),
+                new XAttribute("arguments", Args("act", id, action.Index)));
+            var style = CallButtonStyle(action.Title);
+            if (style is not null) button.Add(new XAttribute("hint-buttonStyle", style));
+            actions.Add(button);
+        }
+
+        var toast = new XElement("toast",
+            new XAttribute("scenario", "incomingCall"),
+            new XAttribute("useButtonStyle", "true"),
+            new XAttribute("launch", Args("open", id)),
+            new XElement("visual", binding),
+            new XElement("audio", new XAttribute("src", "ms-winsoundevent:Notification.Looping.Call"), new XAttribute("loop", "true")));
+        if (actions.HasElements) toast.Add(actions);
+        ShowXml(toast, tag: id, group: IdFor(n.Package));
+    }
+
+    /// <summary>Green for answering, red for declining/hanging up (matched on the phone's own button text).</summary>
+    public static string? CallButtonStyle(string title)
+    {
+        var t = title.ToLowerInvariant();
+        if (t.Contains("answer") || t.Contains("accept") || t.Contains("pick up")) return "Success";
+        if (t.Contains("decline") || t.Contains("reject") || t.Contains("hang up") || t.Contains("end call") || t == "end") return "Critical";
+        return null;
     }
 
     /// <summary>A plain Tandem message (not from the phone).</summary>
@@ -157,12 +208,14 @@ public sealed class ToastPresenter
         return image;
     }
 
-    private static string? SaveImage(byte[] png, string id)
+    /// <summary>Saves a notification's sender photo so toasts and the list can show it.</summary>
+    public static string? SaveImage(byte[]? png, string key)
     {
+        if (png is not { Length: > 0 }) return null;
         try
         {
             Directory.CreateDirectory(CacheDir);
-            var path = Path.Combine(CacheDir, id + ".png");
+            var path = Path.Combine(CacheDir, IdFor(key) + ".png");
             File.WriteAllBytes(path, png);
             return path;
         }

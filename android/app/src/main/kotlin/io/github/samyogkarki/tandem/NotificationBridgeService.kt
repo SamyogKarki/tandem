@@ -35,6 +35,10 @@ class NotificationBridgeService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         instance = this
+        // Watch for Wireless debugging going off, and switch it back on if a restart just did that
+        // (a fallback for phones that hold back BOOT_COMPLETED).
+        WirelessDebugging.arm(this)
+        WirelessDebugging.enableSoon(this, "listener started")
         link?.stop()
         link = PcLink(
             onMessage = { connection, msg ->
@@ -66,14 +70,24 @@ class NotificationBridgeService : NotificationListenerService() {
         super.onDestroy()
     }
 
+    /** Keys the PC currently shows, so a notification that turns into something we skip gets withdrawn. */
+    private val sentKeys = HashSet<String>()
+
     override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap?) {
         val connection = ready?.takeUnless { it.closed } ?: return
-        val json = NotificationMapper.toJson(this, sbn, rankingMap) ?: return
+        val json = NotificationMapper.toJson(this, sbn, rankingMap)
+        if (json == null) {
+            // e.g. a ringing call that was just answered is now an ongoing call: stop ringing on the PC.
+            if (sentKeys.remove(sbn.key)) connection.send(JSONObject().put("t", "removed").put("key", sbn.key))
+            return
+        }
+        sentKeys.add(sbn.key)
         sendIconIfNeeded(connection, sbn.packageName)
         connection.send(JSONObject().put("t", "posted").put("n", json))
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification, rankingMap: RankingMap?, reason: Int) {
+        sentKeys.remove(sbn.key)
         ready?.takeUnless { it.closed }?.send(JSONObject().put("t", "removed").put("key", sbn.key))
     }
 
@@ -85,6 +99,13 @@ class NotificationBridgeService : NotificationListenerService() {
                 "action" -> find(msg.getString("key"))?.let { runAction(it, msg.getInt("i"), null) }
                 "reply" -> find(msg.getString("key"))?.let { runAction(it, msg.getInt("i"), msg.getString("text")) }
                 "test" -> TestNotifications.post(this)
+                "testCall" -> TestNotifications.postCall(this)
+                "dismissAll" -> cancelAllNotifications()
+                // The PC just granted the permission reconnecting needs: start using it.
+                "rearm" -> {
+                    WirelessDebugging.onPcConnected(this)
+                    connection.send(JSONObject().put("t", "reconnect").put("state", reconnectState()))
+                }
                 "ping" -> connection.send(JSONObject().put("t", "pong"))
                 else -> Log.w(TAG, "Unknown message ${msg.optString("t")}")
             }
@@ -102,24 +123,37 @@ class NotificationBridgeService : NotificationListenerService() {
         LinkService.start(this)
         val nonce = msg.optString("nonce")
         iconsSent.clear()
+        // The PC reached us, so this Wi-Fi is one where Wireless debugging is wanted: remember it,
+        // so we can switch Wireless debugging back on here after a restart. This also arms the
+        // watch, in case the listener started before the PC granted the permission.
+        WirelessDebugging.onPcConnected(this)
         connection.send(
             JSONObject()
                 .put("t", "hello")
                 .put("v", PROTOCOL_VERSION)
                 .put("app", BuildConfigInfo.versionName(this))
                 .put("proof", Pairing.proof(this, nonce))
+                .put("reconnect", reconnectState())
         )
         ready = connection
+        sentKeys.clear()
         val items = JSONArray()
         val rankings = currentRanking
         activeNotifications?.forEach { sbn ->
             NotificationMapper.toJson(this, sbn, rankings)?.let {
                 sendIconIfNeeded(connection, sbn.packageName)
+                sentKeys.add(sbn.key)
                 items.put(it)
             }
         }
         connection.send(JSONObject().put("t", "snapshot").put("items", items))
         Log.i(TAG, "snapshot of ${items.length()} queued in ${android.os.SystemClock.elapsedRealtime() - started} ms")
+    }
+
+    private fun reconnectState(): String = when {
+        !WirelessDebugging.canWrite(this) -> "noPermission"
+        !WirelessDebugging.isEnabled(this) -> "off"
+        else -> "on"
     }
 
     private fun sendIconIfNeeded(connection: PcLink.Connection, pkg: String) {
