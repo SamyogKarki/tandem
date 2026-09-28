@@ -20,6 +20,8 @@ public sealed class AppSettings
     public DateTime? NotificationsPausedUntil { get; set; }
     /// <summary>When off, pop-ups say only which app a notification is from (privacy on shared screens).</summary>
     public bool ShowMessageText { get; set; } = true;
+    /// <summary>Phones (hardware serials) where the user allowed HyperOS clipboard access; re-applied after the phone restarts.</summary>
+    public List<string> ClipboardAllowedPhones { get; set; } = [];
     public bool StartWithWindows { get; set; } = true;
     /// <summary>Whether we've told the user that closing the window keeps Tandem in the tray.</summary>
     public bool TrayHintShown { get; set; }

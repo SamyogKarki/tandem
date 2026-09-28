@@ -16,6 +16,9 @@
     <!-- Unpackaged + self-contained for now: runs without the Windows App Runtime or a .NET install.
          Phase 3 (Bluetooth calls) needs package identity; revisit packaging then. -->
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Without this, `dotnet publish` leaves out Tandem.pri (the compiled XAML), and the
+         installed app can't load its windows. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <SelfContained>true</SelfContained>
     <Nullable>enable</Nullable>
@@ -24,14 +27,23 @@
     <ApplicationIcon>Assets\tandem.ico</ApplicationIcon>
     <!-- Program.cs provides Main (single instance) -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-    <Version>0.1.0</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <!-- The Windows App SDK pieces Tandem uses, instead of the Microsoft.WindowsAppSDK bundle: that
+         also ships the AI, ML (onnxruntime, DirectML), Search and Widgets libraries, about 45 MB of
+         installer we never load. Versions as in Microsoft.WindowsAppSDK 2.5.1. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="2.0.4" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.3.12" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.1.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="2.1.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.3.9" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="2.5.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="Velopack" Version="1.2.158" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,8 +57,7 @@
     <ScrcpyVendorDir>$(MSBuildThisFileDirectory)..\..\vendor\scrcpy-win64-v$(ScrcpyVersion)\</ScrcpyVendorDir>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="$(ScrcpyVendorDir)**\*" Exclude="$(ScrcpyVendorDir)*.bat;$(ScrcpyVendorDir)*.vbs;$(ScrcpyVendorDir)*.png"
-          Link="tools\scrcpy\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(ScrcpyVendorDir)**\*" Exclude="$(ScrcpyVendorDir)*.bat;$(ScrcpyVendorDir)*.vbs;$(ScrcpyVendorDir)*.png" Link="tools\scrcpy\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <!-- scrcpy shows this image when the phone disconnects -->
     <None Include="$(ScrcpyVendorDir)disconnected.png" Link="tools\scrcpy\disconnected.png" CopyToOutputDirectory="PreserveNewest" Visible="false" />
     <Content Include="Assets\**\*" CopyToOutputDirectory="PreserveNewest" />

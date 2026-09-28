@@ -2,7 +2,8 @@
 <Page
     x:Class="Tandem.App.Views.SettingsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:app="using:Tandem.App">
 
     <Page.Resources>
         <Style x:Key="SettingRow" TargetType="Grid">
@@ -121,6 +122,18 @@
             <Border Style="{StaticResource CardStyle}">
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="VersionText" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{x:Bind Updates.StatusText, Mode=OneWay}" Style="{StaticResource SecondaryText}"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Check for updates" Click="CheckUpdates_Click"
+                                Visibility="{x:Bind app:Ui.Show(Updates.CanCheck), Mode=OneWay}" />
+                        <Button Grid.Column="1" Content="Restart now" Click="RestartToUpdate_Click" Style="{StaticResource AccentButtonStyle}"
+                                Visibility="{x:Bind app:Ui.Show(Updates.IsReady), Mode=OneWay}" />
+                    </Grid>
                     <TextBlock Style="{StaticResource SecondaryText}" FontSize="12">
                         Tandem uses <Hyperlink NavigateUri="https://github.com/Genymobile/scrcpy">scrcpy</Hyperlink> and Android's adb (Apache 2.0),
                         <Hyperlink NavigateUri="https://github.com/SharpAdb/AdvancedSharpAdbClient">AdvancedSharpAdbClient</Hyperlink> (Apache 2.0) and

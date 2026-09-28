@@ -34,6 +34,13 @@ public sealed partial class SettingsPage : Page
 
     private static SettingsStore Store => AppServices.Current.Settings;
 
+    public UpdateService Updates => AppServices.Current.Updates;
+
+    private async void CheckUpdates_Click(object sender, RoutedEventArgs e) => await Updates.CheckNowAsync();
+
+    private async void RestartToUpdate_Click(object sender, RoutedEventArgs e) =>
+        await ((App)Application.Current).RestartToUpdateAsync();
+
     private static string ReconnectDescription(NotificationService notifications)
     {
         if (!notifications.IsConnected) return "Needs the Tandem phone app (set it up on the Phone page).";

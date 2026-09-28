@@ -4,6 +4,12 @@
 
 Tandem connects over **Wireless debugging**, which is built into Android 11 and newer. You scan a QR code once, and after that the phone and PC find each other on your Wi-Fi. The connection is Android's own adb protocol, encrypted and paired to this PC.
 
+## Download
+
+**[Download TandemSetup.exe](https://github.com/SamyogKarki/tandem/releases/latest/download/TandemSetup.exe)** for Windows 10 (2004 or newer) or Windows 11, 64-bit. Open it, and Tandem installs in a few seconds and walks you through connecting your phone. It updates itself after that.
+
+Tandem isn't code-signed yet, so Windows may say "Windows protected your PC": click **More info**, then **Run anyway**. See the [release notes](https://github.com/SamyogKarki/tandem/releases/latest) for details.
+
 ## Features
 
 | | Status |
@@ -69,7 +75,7 @@ Windows PC                                            Android phone
 
 ## Build
 
-Requirements: Windows 10 1903+ / Windows 11, the [.NET 10 SDK](https://dotnet.microsoft.com/download), and, for the companion app, JDK 17+ and the Android SDK (platform 36, build-tools 36). The companion build uses the Gradle wrapper (Gradle 9.8, AGP 9.4 with built-in Kotlin, no AndroidX).
+Requirements: Windows 10 2004+ / Windows 11, the [.NET 10 SDK](https://dotnet.microsoft.com/download), and, for the companion app, JDK 17+ and the Android SDK (platform 36, build-tools 36). The companion build uses the Gradle wrapper (Gradle 9.8, AGP 9.4 with built-in Kotlin, no AndroidX).
 
 ```powershell
 tools\fetch-vendor.ps1                      # downloads scrcpy 4.1 (+ adb), verifies SHA-256
@@ -81,6 +87,8 @@ dotnet test windows\Tandem.Core.Tests
 If the companion APK isn't built, the app still builds and works; only notifications setup is unavailable.
 
 The app is unpackaged and self-contained, so the output runs without the Windows App Runtime or .NET installed.
+
+**Releases** are built with [Velopack](https://velopack.io): `tools\make-release.ps1` publishes the app, packs `TandemSetup.exe` plus the update feed into `artifacts\releases`, and with `-Upload` creates a draft GitHub release (release notes come from `docs\release-notes\<version>.md`; the version from `Tandem.App.csproj`). Installed copies check GitHub Releases every few hours, download updates in the background (deltas are usually a few hundred KB), and finish on the next restart. Setting `TANDEM_UPDATE_SOURCE` to a local folder of releases lets an installed copy try an update before it's published.
 
 **Testing against a real phone:** `Tandem.DeviceCheck` exercises the core library on whatever phone is connected. Its file test works only inside a temporary `Download/.tandem-check-*` folder and deletes it afterwards.
 

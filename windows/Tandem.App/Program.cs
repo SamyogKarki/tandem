@@ -1,6 +1,8 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Tandem.App.Services;
+using Velopack;
 
 namespace Tandem.App;
 
@@ -16,6 +18,13 @@ public static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // First of all: when the installer starts Tandem to install, update or uninstall it, this
+        // does that part and exits. It also finishes an update that downloaded last time.
+        VelopackApp.Build()
+            .SetAppUserModelId(AppUserModelId)
+            .OnBeforeUninstallFastCallback(_ => InstallHooks.BeforeUninstall())
+            .Run();
+
         // Before any window exists: ties taskbar grouping, pinning and notifications to one identity.
         SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
         WinRT.ComWrappersSupport.InitializeComWrappers();

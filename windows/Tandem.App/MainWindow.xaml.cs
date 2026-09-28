@@ -33,8 +33,24 @@ public sealed partial class MainWindow : Window
         session.PropertyChanged += OnSessionChanged;
         FilesItem.IsEnabled = session.IsConnected;
         AppServices.Current.Notifications.Items.CollectionChanged += (_, _) => UpdateBadge();
+        var updates = AppServices.Current.Updates;
+        updates.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(UpdateService.State)) ShowUpdateBar();
+        };
+        ShowUpdateBar();
         Nav.SelectedItem = PhoneItem;
     }
+
+    private void ShowUpdateBar()
+    {
+        var updates = AppServices.Current.Updates;
+        UpdateBar.Message = updates.StatusText;
+        UpdateBar.IsOpen = updates.IsReady;
+    }
+
+    private async void RestartToUpdate_Click(object sender, RoutedEventArgs e) =>
+        await ((App)Application.Current).RestartToUpdateAsync();
 
     /// <summary>How many notifications are waiting on the phone, on the nav item.</summary>
     private void UpdateBadge()

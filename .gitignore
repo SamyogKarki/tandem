@@ -16,3 +16,6 @@ android/local.properties
 *.keystore
 *.jks
 android/.kotlin/
+
+# Release builds (tools/make-release.ps1)
+artifacts/

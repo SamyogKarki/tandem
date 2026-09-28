@@ -69,6 +69,12 @@ public sealed partial class ClipboardService : ObservableObject, IDisposable
         await HyperOsClipboardAccess.AllowAsync(phone);
         CrashLog.Info($"clipboard: allowed HyperOS clipboard access on {phone.Info.Name}");
         PhoneCopyBlocked = await HyperOsClipboardAccess.IsBlockedAsync(phone);
+        // HyperOS forgets this at every restart; remember the user's choice so we can put it back.
+        if (!_settings.Current.ClipboardAllowedPhones.Contains(phone.Info.HardwareSerial))
+        {
+            _settings.Current.ClipboardAllowedPhones.Add(phone.Info.HardwareSerial);
+            _settings.Save();
+        }
     }
 
     public string StatusText => State switch
@@ -137,6 +143,13 @@ public sealed partial class ClipboardService : ObservableObject, IDisposable
         try
         {
             PhoneCopyBlocked = await HyperOsClipboardAccess.IsBlockedAsync(phone);
+            if (PhoneCopyBlocked && _settings.Current.ClipboardAllowedPhones.Contains(phone.Info.HardwareSerial))
+            {
+                // The user allowed this before; HyperOS reset it when the phone restarted.
+                await HyperOsClipboardAccess.AllowAsync(phone);
+                PhoneCopyBlocked = await HyperOsClipboardAccess.IsBlockedAsync(phone);
+                CrashLog.Info("clipboard: HyperOS clipboard access was reset (phone restarted); allowed it again");
+            }
             if (PhoneCopyBlocked) CrashLog.Info("clipboard: HyperOS is blocking phone -> PC");
         }
         catch (Exception)

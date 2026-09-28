@@ -71,6 +71,8 @@ public partial class App : Application
                 CrashLog.Write("Startup", e, "Couldn't update the sign-in entry");
             }
             _ = StartServicesAsync(_services);
+            _services.Updates.UpdateReady += OnUpdateReady;
+            _services.Updates.Start();
         }
 
         if (!startHidden || _services is null) _window.Activate();
@@ -92,6 +94,25 @@ public partial class App : Application
         _tray = null;
         if (_services is not null) await _services.ShutdownAsync();
         Exit();
+    }
+
+    /// <summary>Quits cleanly (adb server, mirror), then lets the updater swap in the new version and restart.</summary>
+    public async Task RestartToUpdateAsync()
+    {
+        if (IsExiting || _services is null) return;
+        IsExiting = true;
+        _tray?.Dispose();
+        _tray = null;
+        await _services.ShutdownAsync();
+        _services.Updates.ApplyAndRestart();
+        Exit();
+    }
+
+    private void OnUpdateReady()
+    {
+        var updates = _services!.Updates;
+        _services.Toasts.ShowInfo("Tandem update ready",
+            $"Version {updates.ReadyVersion} has downloaded. Restart Tandem to finish, or it will finish the next time Tandem starts.");
     }
 
     private void OnWindowClosing(AppWindow sender, AppWindowClosingEventArgs e)
@@ -145,6 +166,9 @@ public partial class App : Application
                 else s.Notifications.PauseFor(TimeSpan.FromHours(1));
             }, Enabled: s.Settings.Current.ShowNotifications),
             TrayMenuItem.Separator,
+            .. (s.Updates.IsReady
+                ? new TrayMenuItem[] { new($"Restart to update Tandem ({s.Updates.ReadyVersion})", () => _ = RestartToUpdateAsync()) }
+                : []),
             new("Quit Tandem", () => _ = ExitAsync()),
         ];
     }
